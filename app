@@ -391,8 +391,8 @@ function defaultData(){
       grupo1: {
         nombre: 'Familia',
         titulares: [
-          {nombre:'Vero&Quique', sub:'Nosotros'}, {nombre:'Quique', sub:'Nosotros'},
-          {nombre:'Pablo', sub:'Niños'}, {nombre:'Carolina', sub:'Niños'}, {nombre:'Pablo&Carol&Álvaro', sub:'Niños'}
+          {nombre:'Titular 1', sub:'Grupo A'}, {nombre:'Titular 2', sub:'Grupo A'},
+          {nombre:'Titular 3', sub:'Grupo B'}, {nombre:'Titular 4', sub:'Grupo B'}, {nombre:'Titular 5', sub:'Grupo B'}
         ],
         bancos: ['CaixaBank','Santander','Bankinter','Renta4','Adbank'],
         securities: [
@@ -406,20 +406,20 @@ function defaultData(){
           {nombre:'TotalEnergies', ticker:'TTE', moneda:'EUR', mercado:'Europa', vehiculo:'Acciones €', sector:'Petróleo y Gas', quote:77.0, baseline:77.0, div:3.20, freq:4, objetivo:82.00},
         ],
         moves: [
-          {titular:'Vero&Quique', banco:'CaixaBank', valor:'Telefónica', operacion:'Comp-Vent', fecha:'2015-03-10', titulos:2000, precio:3.95},
-          {titular:'Vero&Quique', banco:'Bankinter', valor:'Enagás', operacion:'Comp-Vent', fecha:'2016-06-02', titulos:1020, precio:15.10},
-          {titular:'Vero&Quique', banco:'Renta4', valor:'IAG', operacion:'Comp-Vent', fecha:'2018-01-15', titulos:900, precio:6.20},
-          {titular:'Quique', banco:'Santander', valor:'Deutsche Post', operacion:'Comp-Vent', fecha:'2014-05-20', titulos:410, precio:34.50},
-          {titular:'Pablo', banco:'Bankinter', valor:'Verizon', operacion:'Comp-Vent', fecha:'2019-09-12', titulos:340, precio:36.10},
-          {titular:'Pablo&Carol&Álvaro', banco:'Renta4', valor:'PayPal', operacion:'Comp-Vent', fecha:'2021-02-01', titulos:100, precio:41.93},
-          {titular:'Carolina', banco:'CaixaBank', valor:'Volkswagen', operacion:'Comp-Vent', fecha:'2017-04-18', titulos:315, precio:61.00},
-          {titular:'Vero&Quique', banco:'Santander', valor:'TotalEnergies', operacion:'Comp-Vent', fecha:'2020-11-03', titulos:320, precio:33.80},
-          {titular:'Vero&Quique', banco:'CaixaBank', valor:'Telefónica', operacion:'Dividendos', fecha:'2024-06-01', titulos:0, precio:0, importe:640},
-          {titular:'Pablo', banco:'Bankinter', valor:'Verizon', operacion:'Dividendos', fecha:'2025-08-01', titulos:0, precio:0, importe:69},
+          {titular:'Titular 1', banco:'CaixaBank', valor:'Telefónica', operacion:'Comp-Vent', fecha:'2015-03-10', titulos:2000, precio:3.95},
+          {titular:'Titular 1', banco:'Bankinter', valor:'Enagás', operacion:'Comp-Vent', fecha:'2016-06-02', titulos:1020, precio:15.10},
+          {titular:'Titular 1', banco:'Renta4', valor:'IAG', operacion:'Comp-Vent', fecha:'2018-01-15', titulos:900, precio:6.20},
+          {titular:'Titular 2', banco:'Santander', valor:'Deutsche Post', operacion:'Comp-Vent', fecha:'2014-05-20', titulos:410, precio:34.50},
+          {titular:'Titular 3', banco:'Bankinter', valor:'Verizon', operacion:'Comp-Vent', fecha:'2019-09-12', titulos:340, precio:36.10},
+          {titular:'Titular 5', banco:'Renta4', valor:'PayPal', operacion:'Comp-Vent', fecha:'2021-02-01', titulos:100, precio:41.93},
+          {titular:'Titular 4', banco:'CaixaBank', valor:'Volkswagen', operacion:'Comp-Vent', fecha:'2017-04-18', titulos:315, precio:61.00},
+          {titular:'Titular 1', banco:'Santander', valor:'TotalEnergies', operacion:'Comp-Vent', fecha:'2020-11-03', titulos:320, precio:33.80},
+          {titular:'Titular 1', banco:'CaixaBank', valor:'Telefónica', operacion:'Dividendos', fecha:'2024-06-01', titulos:0, precio:0, importe:640},
+          {titular:'Titular 3', banco:'Bankinter', valor:'Verizon', operacion:'Dividendos', fecha:'2025-08-01', titulos:0, precio:0, importe:69},
         ],
         cashBalances: [
-          {titular:'Vero&Quique', banco:'CaixaBank', saldo:8500},
-          {titular:'Pablo', banco:'Bankinter', saldo:1200},
+          {titular:'Titular 1', banco:'CaixaBank', saldo:8500},
+          {titular:'Titular 3', banco:'Bankinter', saldo:1200},
         ],
         yearEndClose: {'Telefónica': {2015:5.7085,2016:5.1510,2017:5.6622,2018:5.1867,2019:4.5227,2020:2.8836,2021:3.4203,2022:3.1700,2023:3.7568,2024:4.6300}},
         dismissed: [],
@@ -1095,3 +1095,4 @@ render();
 </script>
 </body>
 </html>
+
