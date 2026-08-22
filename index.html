@@ -194,20 +194,23 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
         <div class="section-title">Posiciones vivas</div>
         <div class="section-sub" id="posCount"></div>
       </div>
-      <select class="filter" id="filterTitular"></select>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <select class="filter" id="filterTitular"></select>
+        <select class="filter" id="filterBanco"></select>
+      </div>
     </div>
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th>Valor</th><th>Titular</th><th>Banco</th>
+          <th>Valor</th>
           <th class="num">Títulos</th><th class="num">Cotización</th>
           <th class="num">Valoración €</th><th class="num">% cartera</th>
           <th class="num">Dividendos</th><th class="num">Resultado</th><th class="num">Rentab.</th>
-          <th class="num">Potencial</th>
+          <th class="num">TIR</th><th class="num">Potencial</th>
         </tr></thead>
         <tbody id="posBody"></tbody>
       </table>
-      <div class="empty-note">Ordenadas de mayor a menor valoración · valores en $ convertidos a € al cambio actual.</div>
+      <div class="empty-note">Agrupadas por valor (sumando todas las cuentas) · usa los filtros para ver un titular o banco concreto · ordenadas de mayor a menor valoración.</div>
     </div>
   </section>
 
@@ -448,6 +451,7 @@ let DB = null;
 let storageOk = true;
 let mode = 'titular';
 let filterTit = 'Todos';
+let filterBanco = 'Todos';
 let kpiGroup = 'Total';
 let currentView = 'grupo'; // 'grupo' | 'valores'
 
@@ -509,6 +513,44 @@ function positions(filterFn){
   return Object.values(map).filter(p => Math.abs(p.titulos) > 0.001);
 }
 
+function tableFilterFn(){
+  return m => {
+    if(kpiGroup!=='Total' && groupOf(m.titular)!==kpiGroup) return false;
+    if(filterTit!=='Todos' && m.titular!==filterTit) return false;
+    if(filterBanco!=='Todos' && m.banco!==filterBanco) return false;
+    return true;
+  };
+}
+function positionsByValor(filterFn){
+  const map = {};
+  G().moves.filter(filterFn || (()=>true)).forEach(m=>{
+    const s = sec(m.valor); const moneda = s ? s.moneda : 'EUR';
+    if(!map[m.valor]) map[m.valor] = {valor:m.valor, titulos:0, coste:0, dividendos:0};
+    const p = map[m.valor];
+    if(m.operacion === 'Comp-Vent'){
+      const titulos = +m.titulos||0, precio = +m.precio||0;
+      p.titulos += titulos;
+      p.coste += toEurAmt(titulos*precio, moneda);
+    } else if(m.operacion === 'Dividendos'){
+      p.dividendos += toEurAmt((+m.importe)||0, moneda);
+    }
+  });
+  return Object.values(map).filter(p => Math.abs(p.titulos) > 0.001);
+}
+function positionXirr(valor, filterFn, titulosActuales){
+  const cfs = G().moves.filter(filterFn).filter(m=>m.valor===valor && m.fecha).map(m=>{
+    const s = sec(m.valor); const moneda = s ? s.moneda : 'EUR';
+    const date = new Date(m.fecha);
+    let amount = 0;
+    if(m.operacion === 'Comp-Vent') amount = -toEurAmt((+m.titulos||0)*(+m.precio||0), moneda);
+    else if(m.operacion === 'Dividendos') amount = toEurAmt((+m.importe||0), moneda);
+    return {date, amount};
+  });
+  const q = quoteEur(valor);
+  cfs.push({date:new Date(), amount: titulosActuales*q});
+  return xirr(cfs);
+}
+
 function xirr(cashflows){
   if(cashflows.length<2) return NaN;
   const sorted = [...cashflows].sort((a,b)=>a.date-b.date);
@@ -561,8 +603,8 @@ function render(){
     renderEvolution();
     renderCash();
     renderPending();
-    renderFilterOptions(positions());
-    renderTable(positions());
+    renderFilterOptions();
+    renderTable();
     renderTitularesBancos();
     renderRaw();
   }
@@ -591,7 +633,7 @@ function renderGroupTabs(){
         const nuevo = prompt('Nombre del grupo:', DB.grupos[gid].nombre);
         if(nuevo && nuevo.trim()){ DB.grupos[gid].nombre = nuevo.trim(); saveAll(); }
       } else {
-        DB.activeGrupo = gid; currentView='grupo'; filterTit='Todos'; kpiGroup='Total'; mode='titular';
+        DB.activeGrupo = gid; currentView='grupo'; filterTit='Todos'; filterBanco='Todos'; kpiGroup='Total'; mode='titular';
         saveAll();
       }
       render();
@@ -631,7 +673,7 @@ function renderKpiToggle(){
   if(!['Total',...subs].includes(kpiGroup)) kpiGroup = 'Total';
   el.innerHTML = ['Total', ...subs].map(s=>`<button data-g="${s}" class="${s===kpiGroup?'active':''}">${s}</button>`).join('');
   el.querySelectorAll('button').forEach(btn=>{
-    btn.onclick = ()=>{ kpiGroup = btn.dataset.g; renderKpiToggle(); renderKpis(); };
+    btn.onclick = ()=>{ kpiGroup = btn.dataset.g; renderKpiToggle(); renderKpis(); renderTable(); };
   });
 }
 
@@ -839,33 +881,39 @@ document.getElementById('addCashBtn').onclick = ()=>{
   saveAll(); render();
 };
 
-function renderFilterOptions(pos){
-  const selEl = document.getElementById('filterTitular');
-  const titulares = ['Todos', ...new Set(pos.map(p=>p.titular))];
-  selEl.innerHTML = titulares.map(t=>`<option value="${t}" ${t===filterTit?'selected':''}>${t==='Todos'?'Todos los titulares':t}</option>`).join('');
+function renderFilterOptions(){
+  const selT = document.getElementById('filterTitular');
+  const titulares = ['Todos', ...G().titulares.map(t=>t.nombre)];
+  selT.innerHTML = titulares.map(t=>`<option value="${t}" ${t===filterTit?'selected':''}>${t==='Todos'?'Todos los titulares':t}</option>`).join('');
+  const selB = document.getElementById('filterBanco');
+  const bancos = ['Todos', ...G().bancos];
+  selB.innerHTML = bancos.map(b=>`<option value="${b}" ${b===filterBanco?'selected':''}>${b==='Todos'?'Todos los bancos':b}</option>`).join('');
 }
 
-function renderTable(pos){
+function renderTable(){
+  const fn = tableFilterFn();
+  const pos = positionsByValor(fn);
   let total = 0;
   const withVal = pos.map(p=>{ const q = quoteEur(p.valor) || (p.coste/p.titulos); const val = p.titulos*q; total += val; return {...p,q,val}; });
-  let filtered = filterTit==='Todos' ? withVal : withVal.filter(p=>p.titular===filterTit);
-  filtered = filtered.sort((a,b)=> b.val - a.val);
-  document.getElementById('posCount').textContent = `${filtered.length} de ${withVal.length} posiciones mostradas`;
-  const rows = filtered.map(p=>{
+  const sorted = withVal.sort((a,b)=> b.val - a.val);
+  document.getElementById('posCount').textContent = `${sorted.length} posiciones`;
+  const rows = sorted.map(p=>{
     const resultado = p.val - p.coste + p.dividendos;
     const rent = p.coste ? resultado/p.coste : 0;
     const peso = total ? p.val/total : 0;
     const s = sec(p.valor);
     const potencial = (s && s.objetivo>0) ? (s.objetivo - s.quote)/s.quote : NaN;
-    return `<tr><td class="name">${p.valor}</td><td>${p.titular}</td><td><span class="tag">${p.banco}</span></td>
+    const tir = positionXirr(p.valor, fn, p.titulos);
+    return `<tr><td class="name">${p.valor}</td>
       <td class="num">${p.titulos.toLocaleString('es-ES')}</td><td class="num">${(s?s.quote:p.q).toFixed(3)}${s&&s.moneda==='USD'?' $':''}</td>
       <td class="num">${eur(p.val)}</td><td class="num">${pct(peso)}</td>
       <td class="num">${eur(p.dividendos)}</td>
       <td class="num ${resultado>=0?'pos':'neg'}">${eur(resultado)}</td>
       <td class="num ${rent>=0?'pos':'neg'}">${pct(rent)}</td>
+      <td class="num ${isFinite(tir)?(tir>=0?'pos':'neg'):''}">${pct(tir)}</td>
       <td class="num ${isFinite(potencial)?(potencial>=0?'pos':'neg'):''}">${pct(potencial)}</td></tr>`;
   }).join('');
-  document.getElementById('posBody').innerHTML = rows || '<tr><td colspan="11" class="empty-note">Sin posiciones para este filtro.</td></tr>';
+  document.getElementById('posBody').innerHTML = rows || '<tr><td colspan="10" class="empty-note">Sin posiciones para este filtro.</td></tr>';
 }
 
 function pendingDividends(){
@@ -1085,7 +1133,8 @@ document.getElementById('breakdownToggle').addEventListener('click', e=>{
   [...document.querySelectorAll('#breakdownToggle button')].forEach(b=>b.classList.toggle('active', b===btn));
   renderBreakdown(positions());
 });
-document.getElementById('filterTitular').addEventListener('change', e=>{ filterTit = e.target.value; renderTable(positions()); });
+document.getElementById('filterTitular').addEventListener('change', e=>{ filterTit = e.target.value; renderTable(); });
+document.getElementById('filterBanco').addEventListener('change', e=>{ filterBanco = e.target.value; renderTable(); });
 
 document.getElementById('refreshBtn').onclick = async (e)=>{
   const btn = e.currentTarget; btn.disabled = true; const orig = btn.textContent;
@@ -1191,6 +1240,7 @@ render();
 </script>
 </body>
 </html>
+
 
 
 
