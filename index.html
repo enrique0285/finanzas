@@ -319,8 +319,12 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
     <div class="section-head">
       <div>
         <div class="section-title">Valores y cotizaciones</div>
-        <div class="section-sub">Compartido entre todos los grupos: ticker, divisa, dividendo y precio objetivo de cada valor. <b>La cotización es siempre la que tú escribes aquí</b> — la app no busca precios en internet ni en ningún mercado real. El botón "Actualizar cotizaciones" de la cabecera simula pequeñas variaciones para probar la app; cuando conectemos una fuente de datos real, esto cambiará.</div>
+        <div class="section-sub">Compartido entre todos los grupos: ticker, divisa, dividendo y precio objetivo de cada valor. El ticker debe estar en formato Yahoo Finance (p.ej. <b>TEF.MC</b> para Madrid, <b>DHL.DE</b> para Xetra, <b>TTE.PA</b> para París, sin sufijo para EEUU) — es lo que se usa para pedir la cotización real al pulsar "Actualizar cotizaciones".</div>
       </div>
+    </div>
+    <div class="field" style="max-width:560px; margin-bottom:22px;">
+      <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;color:var(--text-dim);">URL de tu Worker de cotizaciones</label>
+      <input id="workerUrlInput" placeholder="https://tu-worker.tu-usuario.workers.dev" style="width:100%;padding:10px 12px;border:1px solid var(--line);background:var(--panel-2);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:13px;border-radius:2px;">
     </div>
     <div class="table-wrap" style="margin-bottom:24px;">
       <table>
@@ -401,6 +405,7 @@ const STORAGE_KEY = 'patrimonio_app_v1';
 function defaultData(){
   return {
     eurUsd: 1.08,
+    workerUrl: '',
     lastUpdateTs: null,
     activeGrupo: 'grupo1',
     securities: [
@@ -466,7 +471,7 @@ function loadAll(){
   DB = defaultData();
 }
 function migrateIfNeeded(){
-  if(DB.securities) return; // ya está en formato nuevo (global)
+  if(!DB.securities){
   const merged = {}, closes = {};
   Object.values(DB.grupos || {}).forEach(g=>{
     (g.securities||[]).forEach(s=>{ if(!merged[s.nombre]) merged[s.nombre] = s; });
@@ -478,6 +483,8 @@ function migrateIfNeeded(){
   DB.securities = Object.values(merged);
   DB.yearEndClose = closes;
   saveAll();
+  }
+  if(DB.workerUrl === undefined) DB.workerUrl = '';
 }
 function saveAll(){
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(DB)); }
@@ -594,6 +601,7 @@ function render(){
   document.getElementById('groupEyebrow').textContent = currentView==='valores' ? 'Patrimonio · Valores y cotizaciones (global)' : 'Patrimonio · ' + G().nombre;
   renderTicker();
   if(currentView==='valores'){
+    document.getElementById('workerUrlInput').value = DB.workerUrl || '';
     renderSecurities();
     renderYearClose();
   } else {
@@ -1136,15 +1144,40 @@ document.getElementById('breakdownToggle').addEventListener('click', e=>{
 document.getElementById('filterTitular').addEventListener('change', e=>{ filterTit = e.target.value; renderTable(); });
 document.getElementById('filterBanco').addEventListener('change', e=>{ filterBanco = e.target.value; renderTable(); });
 
+document.getElementById('workerUrlInput').addEventListener('change', e=>{
+  DB.workerUrl = e.target.value.trim();
+  saveAll();
+});
+
 document.getElementById('refreshBtn').onclick = async (e)=>{
   const btn = e.currentTarget; btn.disabled = true; const orig = btn.textContent;
   btn.innerHTML = '<span class="spin">↻</span> Actualizando…';
-  await new Promise(r=>setTimeout(r, 600));
-  DB.securities.forEach(s=>{ const drift = (Math.random()-0.5)*0.02; s.quote = Math.max(0.1, s.quote*(1+drift)); });
-  DB.eurUsd = Math.max(0.7, DB.eurUsd*(1+(Math.random()-0.5)*0.006));
-  DB.lastUpdateTs = Date.now();
-  saveAll();
-  render();
+  try{
+    if(!DB.workerUrl){
+      alert('Configura primero la URL de tu Worker de cotizaciones en la pestaña "Valores y cotizaciones".');
+      btn.disabled = false; btn.textContent = orig; return;
+    }
+    const tickers = [...new Set(DB.securities.map(s=>s.ticker).filter(Boolean))];
+    tickers.push('EURUSD=X');
+    const url = DB.workerUrl.replace(/\/$/, '') + '/?symbols=' + encodeURIComponent(tickers.join(','));
+    const resp = await fetch(url);
+    if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    const fallos = [];
+    DB.securities.forEach(s=>{
+      if(!s.ticker) return;
+      const d = data[s.ticker];
+      if(d && typeof d.price === 'number') s.quote = d.price;
+      else fallos.push(s.nombre);
+    });
+    if(data['EURUSD=X'] && typeof data['EURUSD=X'].price === 'number') DB.eurUsd = data['EURUSD=X'].price;
+    DB.lastUpdateTs = Date.now();
+    saveAll();
+    render();
+    if(fallos.length) alert('No se pudo actualizar: ' + fallos.join(', ') + '. Revisa que el ticker esté bien escrito (formato Yahoo, p.ej. TEF.MC).');
+  }catch(err){
+    alert('No se pudieron actualizar las cotizaciones: ' + err.message);
+  }
   btn.disabled = false; btn.textContent = orig;
 };
 
