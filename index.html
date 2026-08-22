@@ -55,7 +55,7 @@ h1{font-family:'Fraunces',serif;font-weight:600;font-size:38px;margin:0;letter-s
 .group-toggle button{background:var(--panel);border:1px solid var(--line);color:var(--text-dim);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 16px;border-radius:20px;cursor:pointer;}
 .group-toggle button.active{background:var(--brass);color:#fff;border-color:var(--brass);font-weight:600;}
 
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1px;background:var(--line);margin:14px 32px 0;border:1px solid var(--line);}
+.kpis{display:grid;grid-template-columns:repeat(4, 1fr);gap:1px;background:var(--line);margin:14px 32px 0;border:1px solid var(--line);}
 .kpi{background:var(--panel);padding:20px 18px;}
 .kpi .label{font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-dim);margin-bottom:9px;}
 .kpi .value{font-family:'Fraunces',serif;font-size:24px;font-weight:600;color:var(--text);}
@@ -142,6 +142,9 @@ tbody tr:hover{background:var(--panel-2);}
 .storage-banner.show{display:block;}
 
 footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-dim);line-height:1.6;}
+@media (max-width:900px){
+  .kpis{grid-template-columns:repeat(2, 1fr);}
+}
 @media (max-width:760px){
   header{padding:20px 20px 20px;} section{padding:32px 20px 0;} h1{font-size:28px;}
   .bar-row{grid-template-columns:90px 1fr 120px;} .kpis{margin:14px 20px 0;} .group-toggle{margin:24px 20px 0;}
@@ -204,16 +207,6 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
   <section>
     <div class="section-head">
       <div>
-        <div class="section-title">Cotizaciones de cierre anual</div>
-        <div class="section-sub">Precio de cierre a 31 de diciembre de cada año, en la divisa nativa de cada valor.</div>
-      </div>
-    </div>
-    <div class="table-wrap" id="yearCloseWrap"></div>
-  </section>
-
-  <section>
-    <div class="section-head">
-      <div>
         <div class="section-title">Efectivo y liquidez</div>
         <div class="section-sub">Saldo disponible por cuenta, para calcular qué % de tu patrimonio está invertido frente a en liquidez.</div>
       </div>
@@ -263,25 +256,6 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
   <section>
     <div class="section-head">
       <div>
-        <div class="section-title">Maestro de valores</div>
-        <div class="section-sub">Ticker, divisa, dividendo y precio objetivo de cada valor.</div>
-      </div>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr class="et">
-          <th>Nombre</th><th>Ticker</th><th>Divisa</th><th>Mercado</th><th>Vehículo</th><th>Sector</th>
-          <th class="num">Cotización</th><th class="num">€/título</th><th>Frecuencia</th><th class="num">Objetivo</th><th></th>
-        </tr></thead>
-        <tbody class="et" id="secBody"></tbody>
-      </table>
-      <div class="empty-note"><button class="btn small ghost" id="addSecBtn">+ Añadir valor</button></div>
-    </div>
-  </section>
-
-  <section>
-    <div class="section-head">
-      <div>
         <div class="section-title">Titulares y bancos de este grupo</div>
         <div class="section-sub">El "subgrupo" es opcional — sirve para desglosar los KPIs (p.ej. "Nosotros" / "Niños"). Déjalo vacío si no lo necesitas.</div>
       </div>
@@ -298,6 +272,30 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
     <div class="addchip" style="margin-top:12px;">
       <input id="newBancoInput" placeholder="Nombre del banco">
       <button class="btn small ghost" id="addBancoBtn">+ Añadir banco</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <div>
+        <div class="section-title">Valores y cotizaciones</div>
+        <div class="section-sub">Compartido entre todos los grupos: ticker, divisa, dividendo, precio objetivo y cierres anuales de cada valor.</div>
+      </div>
+      <button class="btn ghost small" id="toggleValoresBtn">Ocultar</button>
+    </div>
+    <div id="valoresContainer">
+      <div class="table-wrap" style="margin-bottom:24px;">
+        <table>
+          <thead><tr class="et">
+            <th>Nombre</th><th>Ticker</th><th>Divisa</th><th>Mercado</th><th>Vehículo</th><th>Sector</th>
+            <th class="num">Cotización</th><th class="num">€/título</th><th>Frecuencia</th><th class="num">Objetivo</th><th></th>
+          </tr></thead>
+          <tbody class="et" id="secBody"></tbody>
+        </table>
+        <div class="empty-note"><button class="btn small ghost" id="addSecBtn">+ Añadir valor</button></div>
+      </div>
+      <div class="section-sub" style="margin-bottom:12px;">Cotizaciones de cierre anual (31 de diciembre, divisa nativa de cada valor):</div>
+      <div class="table-wrap" id="yearCloseWrap"></div>
     </div>
   </section>
 
@@ -389,6 +387,17 @@ function defaultData(){
     eurUsd: 1.08,
     lastUpdateTs: null,
     activeGrupo: 'grupo1',
+    securities: [
+      {nombre:'Telefónica', ticker:'TEF', moneda:'EUR', mercado:'Europa', vehiculo:'Acciones €', sector:'Telecomunicaciones', quote:3.9245, baseline:3.9245, div:0.30, freq:2, objetivo:4.50},
+      {nombre:'Enagás', ticker:'ENG', moneda:'EUR', mercado:'Europa', vehiculo:'Acciones €', sector:'Energía', quote:20.04, baseline:20.04, div:1.74, freq:2, objetivo:22.00},
+      {nombre:'IAG', ticker:'IAG', moneda:'EUR', mercado:'Europa', vehiculo:'Acciones €', sector:'Turismo', quote:1.953, baseline:1.953, div:0.09, freq:1, objetivo:2.30},
+      {nombre:'Deutsche Post', ticker:'DHL', moneda:'EUR', mercado:'Europa', vehiculo:'Acciones €', sector:'Logística', quote:48.14, baseline:48.14, div:1.85, freq:1, objetivo:52.00},
+      {nombre:'Verizon', ticker:'VZ', moneda:'USD', mercado:'EEUU', vehiculo:'Acciones $', sector:'Telecomunicaciones', quote:46.38, baseline:46.38, div:2.71, freq:4, objetivo:48.00},
+      {nombre:'PayPal', ticker:'PYPL', moneda:'USD', mercado:'EEUU', vehiculo:'Acciones $', sector:'Tecnología', quote:50.48, baseline:50.48, div:0, freq:0, objetivo:65.00},
+      {nombre:'Volkswagen', ticker:'VOW3', moneda:'EUR', mercado:'Europa', vehiculo:'Acciones €', sector:'Automoción', quote:87.36, baseline:87.36, div:4.50, freq:1, objetivo:95.00},
+      {nombre:'TotalEnergies', ticker:'TTE', moneda:'EUR', mercado:'Europa', vehiculo:'Acciones €', sector:'Petróleo y Gas', quote:77.0, baseline:77.0, div:3.20, freq:4, objetivo:82.00},
+    ],
+    yearEndClose: {'Telefónica': {2015:5.7085,2016:5.1510,2017:5.6622,2018:5.1867,2019:4.5227,2020:2.8836,2021:3.4203,2022:3.1700,2023:3.7568,2024:4.6300}},
     grupos: {
       grupo1: {
         nombre: 'Familia',
@@ -397,16 +406,6 @@ function defaultData(){
           {nombre:'Titular 3', sub:'Grupo B'}, {nombre:'Titular 4', sub:'Grupo B'}, {nombre:'Titular 5', sub:'Grupo B'}
         ],
         bancos: ['CaixaBank','Santander','Bankinter','Renta4','Adbank'],
-        securities: [
-          {nombre:'Telefónica', ticker:'TEF', moneda:'EUR', mercado:'Europa', vehiculo:'Acciones €', sector:'Telecomunicaciones', quote:3.9245, baseline:3.9245, div:0.30, freq:2, objetivo:4.50},
-          {nombre:'Enagás', ticker:'ENG', moneda:'EUR', mercado:'Europa', vehiculo:'Acciones €', sector:'Energía', quote:20.04, baseline:20.04, div:1.74, freq:2, objetivo:22.00},
-          {nombre:'IAG', ticker:'IAG', moneda:'EUR', mercado:'Europa', vehiculo:'Acciones €', sector:'Turismo', quote:1.953, baseline:1.953, div:0.09, freq:1, objetivo:2.30},
-          {nombre:'Deutsche Post', ticker:'DHL', moneda:'EUR', mercado:'Europa', vehiculo:'Acciones €', sector:'Logística', quote:48.14, baseline:48.14, div:1.85, freq:1, objetivo:52.00},
-          {nombre:'Verizon', ticker:'VZ', moneda:'USD', mercado:'EEUU', vehiculo:'Acciones $', sector:'Telecomunicaciones', quote:46.38, baseline:46.38, div:2.71, freq:4, objetivo:48.00},
-          {nombre:'PayPal', ticker:'PYPL', moneda:'USD', mercado:'EEUU', vehiculo:'Acciones $', sector:'Tecnología', quote:50.48, baseline:50.48, div:0, freq:0, objetivo:65.00},
-          {nombre:'Volkswagen', ticker:'VOW3', moneda:'EUR', mercado:'Europa', vehiculo:'Acciones €', sector:'Automoción', quote:87.36, baseline:87.36, div:4.50, freq:1, objetivo:95.00},
-          {nombre:'TotalEnergies', ticker:'TTE', moneda:'EUR', mercado:'Europa', vehiculo:'Acciones €', sector:'Petróleo y Gas', quote:77.0, baseline:77.0, div:3.20, freq:4, objetivo:82.00},
-        ],
         moves: [
           {titular:'Titular 1', banco:'CaixaBank', valor:'Telefónica', operacion:'Comp-Vent', fecha:'2015-03-10', titulos:2000, precio:3.95},
           {titular:'Titular 1', banco:'Bankinter', valor:'Enagás', operacion:'Comp-Vent', fecha:'2016-06-02', titulos:1020, precio:15.10},
@@ -423,12 +422,11 @@ function defaultData(){
           {titular:'Titular 1', banco:'CaixaBank', saldo:8500},
           {titular:'Titular 3', banco:'Bankinter', saldo:1200},
         ],
-        yearEndClose: {'Telefónica': {2015:5.7085,2016:5.1510,2017:5.6622,2018:5.1867,2019:4.5227,2020:2.8836,2021:3.4203,2022:3.1700,2023:3.7568,2024:4.6300}},
         dismissed: [],
         rawVisible: true,
       },
-      grupo2: { nombre:'Grupo 2', titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], securities:[], moves:[], cashBalances:[], yearEndClose:{}, dismissed:[], rawVisible:true },
-      grupo3: { nombre:'Grupo 3', titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], securities:[], moves:[], cashBalances:[], yearEndClose:{}, dismissed:[], rawVisible:true },
+      grupo2: { nombre:'Grupo 2', titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], moves:[], cashBalances:[], dismissed:[], rawVisible:true },
+      grupo3: { nombre:'Grupo 3', titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], moves:[], cashBalances:[], dismissed:[], rawVisible:true },
     }
   };
 }
@@ -445,9 +443,23 @@ const EURUSD_BASELINE = 1.08;
 function loadAll(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
-    if(raw){ DB = JSON.parse(raw); return; }
+    if(raw){ DB = JSON.parse(raw); migrateIfNeeded(); return; }
   }catch(e){ storageOk = false; }
   DB = defaultData();
+}
+function migrateIfNeeded(){
+  if(DB.securities) return; // ya está en formato nuevo (global)
+  const merged = {}, closes = {};
+  Object.values(DB.grupos || {}).forEach(g=>{
+    (g.securities||[]).forEach(s=>{ if(!merged[s.nombre]) merged[s.nombre] = s; });
+    Object.entries(g.yearEndClose||{}).forEach(([valor,obj])=>{
+      closes[valor] = Object.assign({}, closes[valor]||{}, obj);
+    });
+    delete g.securities; delete g.yearEndClose;
+  });
+  DB.securities = Object.values(merged);
+  DB.yearEndClose = closes;
+  saveAll();
 }
 function saveAll(){
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(DB)); }
@@ -459,7 +471,7 @@ function showStorageBanner(){
   b.classList.add('show');
 }
 
-function sec(nombre){ return G().securities.find(s=>s.nombre===nombre); }
+function sec(nombre){ return DB.securities.find(s=>s.nombre===nombre); }
 function toEurAmt(amount, moneda){ return moneda==='USD' ? amount/DB.eurUsd : amount; }
 function quoteEur(nombre){ const s = sec(nombre); if(!s) return 0; return toEurAmt(s.quote, s.moneda); }
 function groupOf(titularNombre){ const t = G().titulares.find(t=>t.nombre===titularNombre); return (t && t.sub) ? t.sub : 'Total'; }
@@ -571,7 +583,9 @@ function renderGroupTabs(){
 }
 
 function renderTicker(){
-  const items = G().securities.map(s=>{
+  const usados = new Set(G().moves.map(m=>m.valor));
+  const list = DB.securities.filter(s=>usados.has(s.nombre));
+  const items = list.map(s=>{
     const sym = s.moneda==='USD' ? '$' : '€';
     const diff = ((s.quote-s.baseline)/s.baseline*100);
     const cls = diff>=0?'up':'down', arrow = diff>=0?'▲':'▼';
@@ -657,6 +671,15 @@ function periodEnds(){
   }
   return ends;
 }
+function closedYearsAllGroups(){
+  const allDates = Object.values(DB.grupos).flatMap(g=>g.moves).filter(m=>m.fecha).map(m=>new Date(m.fecha));
+  if(!allDates.length) return [];
+  const minY = new Date(Math.min(...allDates)).getFullYear();
+  const maxY = new Date().getFullYear() - 1;
+  const years = [];
+  for(let y=minY; y<=maxY; y++) years.push(y);
+  return years;
+}
 function portfolioValueAtDate(dateEnd, isCurrent, year){
   const held = {};
   G().moves.filter(m=>m.operacion==='Comp-Vent' && new Date(m.fecha) <= dateEnd).forEach(m=>{
@@ -678,7 +701,7 @@ function portfolioValueAtDate(dateEnd, isCurrent, year){
     let priceNative;
     if(isCurrent){ priceNative = s.quote; }
     else {
-      const yc = G().yearEndClose[valor] && G().yearEndClose[valor][year];
+      const yc = DB.yearEndClose[valor] && DB.yearEndClose[valor][year];
       priceNative = (yc!=null && yc!=='') ? parseFloat(yc) : (lastPrice[valor] ?? s.quote);
     }
     total += titulos * toEurAmt(priceNative, s.moneda);
@@ -697,14 +720,13 @@ function renderEvolution(){
   document.getElementById('evoChart').innerHTML = rows || '<div class="empty-note">Sin movimientos todavía.</div>';
 }
 function renderYearClose(){
-  const ends = periodEnds().filter(e=>!e.isCurrent);
-  const years = ends.map(e=>e.year);
+  const years = closedYearsAllGroups();
   const wrap = document.getElementById('yearCloseWrap');
-  if(!years.length || !G().securities.length){ wrap.innerHTML = '<div class="empty-note">Sin años cerrados todavía.</div>'; return; }
+  if(!years.length || !DB.securities.length){ wrap.innerHTML = '<div class="empty-note">Sin años cerrados todavía.</div>'; return; }
   const head = `<tr><th>Valor</th>${years.map(y=>`<th class="num">${y}</th>`).join('')}</tr>`;
-  const body = G().securities.map(s=>{
+  const body = DB.securities.map(s=>{
     const cells = years.map(y=>{
-      const v = (G().yearEndClose[s.nombre] && G().yearEndClose[s.nombre][y] != null) ? G().yearEndClose[s.nombre][y] : '';
+      const v = (DB.yearEndClose[s.nombre] && DB.yearEndClose[s.nombre][y] != null) ? DB.yearEndClose[s.nombre][y] : '';
       return `<td class="num"><input type="number" step="any" value="${v}" data-valor="${s.nombre}" data-year="${y}" placeholder="—"></td>`;
     }).join('');
     return `<tr><td class="name">${s.nombre} <span class="tag">${s.moneda}</span></td>${cells}</tr>`;
@@ -713,9 +735,9 @@ function renderYearClose(){
   wrap.querySelectorAll('input[data-valor]').forEach(input=>{
     input.addEventListener('change', ()=>{
       const valor = input.dataset.valor, year = input.dataset.year;
-      if(!G().yearEndClose[valor]) G().yearEndClose[valor] = {};
-      if(input.value === ''){ delete G().yearEndClose[valor][year]; }
-      else { G().yearEndClose[valor][year] = parseFloat(input.value); }
+      if(!DB.yearEndClose[valor]) DB.yearEndClose[valor] = {};
+      if(input.value === ''){ delete DB.yearEndClose[valor][year]; }
+      else { DB.yearEndClose[valor][year] = parseFloat(input.value); }
       saveAll(); renderEvolution();
     });
   });
@@ -855,10 +877,10 @@ function renderPending(){
 }
 
 function valorOptions(selected){
-  return G().securities.map(s=>`<option value="${s.nombre}" ${s.nombre===selected?'selected':''}>${s.nombre} (${s.ticker||'—'})</option>`).join('');
+  return DB.securities.map(s=>`<option value="${s.nombre}" ${s.nombre===selected?'selected':''}>${s.nombre} (${s.ticker||'—'})</option>`).join('');
 }
 function renderSecurities(){
-  document.getElementById('secBody').innerHTML = G().securities.map((s,i)=>`
+  document.getElementById('secBody').innerHTML = DB.securities.map((s,i)=>`
     <tr data-i="${i}">
       <td><input data-f="nombre" value="${s.nombre}"></td>
       <td><input data-f="ticker" value="${s.ticker}"></td>
@@ -879,21 +901,23 @@ function renderSecurities(){
         const f = input.dataset.f; let val = input.value;
         if(['div','objetivo'].includes(f)) val = parseFloat(val)||0;
         if(f==='freq') val = parseInt(val)||0;
-        G().securities[i][f] = val;
+        DB.securities[i][f] = val;
         saveAll(); render();
       });
     });
     const del = tr.querySelector('[data-action="del"]');
     if(del) del.onclick = ()=>{
-      if(G().moves.some(m=>m.valor===G().securities[i].nombre)){
-        if(!confirm('Hay movimientos que usan este valor. ¿Eliminarlo igualmente del maestro?')) return;
+      const nombre = DB.securities[i].nombre;
+      const usadoEnAlgunGrupo = Object.values(DB.grupos).some(g=>g.moves.some(m=>m.valor===nombre));
+      if(usadoEnAlgunGrupo){
+        if(!confirm('Hay movimientos (en este u otro grupo) que usan este valor. ¿Eliminarlo igualmente del maestro?')) return;
       }
-      G().securities.splice(i,1); saveAll(); render();
+      DB.securities.splice(i,1); saveAll(); render();
     };
   });
 }
 document.getElementById('addSecBtn').onclick = ()=>{
-  G().securities.push({nombre:'Nuevo valor', ticker:'', moneda:'EUR', mercado:'Europa', vehiculo:'Acciones €', sector:'', quote:1, baseline:1, div:0, freq:0, objetivo:0});
+  DB.securities.push({nombre:'Nuevo valor', ticker:'', moneda:'EUR', mercado:'Europa', vehiculo:'Acciones €', sector:'', quote:1, baseline:1, div:0, freq:0, objetivo:0});
   saveAll(); render();
 };
 
@@ -974,14 +998,20 @@ function renderRaw(){
   });
 }
 document.getElementById('addRowBtn').onclick = ()=>{
-  if(!G().titulares.length || !G().bancos.length || !G().securities.length){ alert('Añade primero titulares, bancos y al menos un valor.'); return; }
-  G().moves.push({titular:G().titulares[0].nombre, banco:G().bancos[0], valor:G().securities[0].nombre, operacion:'Comp-Vent', fecha:new Date().toISOString().slice(0,10), titulos:0, precio:0});
+  if(!G().titulares.length || !G().bancos.length || !DB.securities.length){ alert('Añade primero titulares, bancos y al menos un valor.'); return; }
+  G().moves.push({titular:G().titulares[0].nombre, banco:G().bancos[0], valor:DB.securities[0].nombre, operacion:'Comp-Vent', fecha:new Date().toISOString().slice(0,10), titulos:0, precio:0});
   saveAll(); render();
 };
 document.getElementById('toggleRawBtn').onclick = ()=>{
   G().rawVisible = !G().rawVisible;
   document.getElementById('rawContainer').style.display = G().rawVisible ? '' : 'none';
   document.getElementById('toggleRawBtn').textContent = G().rawVisible ? 'Ocultar' : 'Mostrar';
+  saveAll();
+};
+document.getElementById('toggleValoresBtn').onclick = ()=>{
+  DB.valoresVisible = DB.valoresVisible===false ? true : false;
+  document.getElementById('valoresContainer').style.display = DB.valoresVisible===false ? 'none' : '';
+  document.getElementById('toggleValoresBtn').textContent = DB.valoresVisible===false ? 'Mostrar' : 'Ocultar';
   saveAll();
 };
 
@@ -997,7 +1027,7 @@ document.getElementById('refreshBtn').onclick = async (e)=>{
   const btn = e.currentTarget; btn.disabled = true; const orig = btn.textContent;
   btn.innerHTML = '<span class="spin">↻</span> Actualizando…';
   await new Promise(r=>setTimeout(r, 600));
-  G().securities.forEach(s=>{ const drift = (Math.random()-0.5)*0.02; s.quote = Math.max(0.1, s.quote*(1+drift)); });
+  DB.securities.forEach(s=>{ const drift = (Math.random()-0.5)*0.02; s.quote = Math.max(0.1, s.quote*(1+drift)); });
   DB.eurUsd = Math.max(0.7, DB.eurUsd*(1+(Math.random()-0.5)*0.006));
   DB.lastUpdateTs = Date.now();
   saveAll();
@@ -1059,7 +1089,7 @@ document.getElementById('saveModal').onclick = ()=>{
     const nombre = document.getElementById('ns_nombre').value.trim();
     if(!nombre){ alert('Ponle un nombre al nuevo valor.'); return; }
     const precioInicial = parseFloat(document.getElementById('f_precio').value) || 10;
-    G().securities.push({
+    DB.securities.push({
       nombre, ticker: document.getElementById('ns_ticker').value.trim() || '—',
       moneda: document.getElementById('ns_moneda').value,
       mercado: document.getElementById('ns_mercado').value,
@@ -1092,10 +1122,13 @@ document.getElementById('saveModal').onclick = ()=>{
 loadAll();
 document.getElementById('rawContainer').style.display = G().rawVisible===false ? 'none' : '';
 document.getElementById('toggleRawBtn').textContent = G().rawVisible===false ? 'Mostrar' : 'Ocultar';
+document.getElementById('valoresContainer').style.display = DB.valoresVisible===false ? 'none' : '';
+document.getElementById('toggleValoresBtn').textContent = DB.valoresVisible===false ? 'Mostrar' : 'Ocultar';
 if(!storageOk) showStorageBanner();
 render();
 </script>
 </body>
 </html>
+
 
 
