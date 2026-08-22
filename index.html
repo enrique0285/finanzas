@@ -142,6 +142,10 @@ tbody tr:hover{background:var(--panel-2);}
 .storage-banner{margin:20px 32px 0;padding:12px 16px;border:1px solid var(--brass);background:rgba(169,129,46,.08);font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-dim);border-radius:2px;display:none;}
 .storage-banner.show{display:block;}
 
+.divider{display:flex;align-items:center;gap:14px;margin:44px 32px 0;padding-top:24px;border-top:1px solid var(--line);}
+.divider span{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);white-space:nowrap;}
+.divider button{margin-left:auto;}
+
 footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-dim);line-height:1.6;}
 @media (max-width:900px){
   .kpis{grid-template-columns:repeat(2, 1fr);}
@@ -186,6 +190,29 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
 
   <section>
     <div class="section-head">
+      <div>
+        <div class="section-title">Posiciones vivas</div>
+        <div class="section-sub" id="posCount"></div>
+      </div>
+      <select class="filter" id="filterTitular"></select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Valor</th><th>Titular</th><th>Banco</th>
+          <th class="num">Títulos</th><th class="num">Cotización</th>
+          <th class="num">Valoración €</th><th class="num">% cartera</th>
+          <th class="num">Dividendos</th><th class="num">Resultado</th><th class="num">Rentab.</th>
+          <th class="num">Potencial</th>
+        </tr></thead>
+        <tbody id="posBody"></tbody>
+      </table>
+      <div class="empty-note">Ordenadas de mayor a menor valoración · valores en $ convertidos a € al cambio actual.</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
       <div class="section-title">Distribución del patrimonio</div>
       <div class="toggle" id="breakdownToggle">
         <button data-mode="titular" class="active">Por titular</button>
@@ -199,11 +226,41 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
   <section>
     <div class="section-head">
       <div>
-        <div class="section-title">Evolución del patrimonio</div>
-        <div class="section-sub">Valor de las posiciones al cierre de cada año, con la cotización de cierre real (tabla de abajo) cuando la tienes cargada; si no, la última operación conocida como aproximación. El año en curso usa la cotización en vivo.</div>
+        <div class="section-title">Evolución del valor invertido</div>
+        <div class="section-sub">Solo acciones/fondos — no incluye el efectivo (no tenemos histórico de saldos de caja). Con la cotización de cierre real (pestaña Valores y cotizaciones) cuando la tienes cargada; si no, la última operación conocida como aproximación. El año en curso usa la cotización en vivo.</div>
+      </div>
+      <div class="toggle" id="evoRangeToggle">
+        <button data-r="10" class="active">Últimos 10 años</button>
+        <button data-r="all">Todo</button>
       </div>
     </div>
-    <div class="breakdown" id="evoChart"></div>
+    <div id="evoChart"></div>
+  </section>
+
+  <div class="divider"><span>Datos</span><button class="btn ghost small" id="toggleDatosBtn">Ocultar</button></div>
+
+  <div id="datosContainer">
+
+  <section>
+    <div class="section-head">
+      <div>
+        <div class="section-title">Titulares y bancos de este grupo</div>
+        <div class="section-sub">El "subgrupo" es opcional — sirve para desglosar los KPIs (p.ej. "Nosotros" / "Niños"). Déjalo vacío si no lo necesitas.</div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="narrow">
+        <thead><tr class="et"><th>Titular</th><th>Subgrupo (para KPIs)</th><th></th></tr></thead>
+        <tbody class="et" id="titularesBody"></tbody>
+      </table>
+      <div class="empty-note"><button class="btn small ghost" id="addTitularBtn">+ Añadir titular</button></div>
+    </div>
+    <div style="height:16px;"></div>
+    <div class="chips" id="bancosChips"></div>
+    <div class="addchip" style="margin-top:12px;">
+      <input id="newBancoInput" placeholder="Nombre del banco">
+      <button class="btn small ghost" id="addBancoBtn">+ Añadir banco</button>
+    </div>
   </section>
 
   <section>
@@ -235,69 +292,23 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
   <section>
     <div class="section-head">
       <div>
-        <div class="section-title">Posiciones vivas</div>
-        <div class="section-sub" id="posCount"></div>
-      </div>
-      <select class="filter" id="filterTitular"></select>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr>
-          <th>Valor</th><th>Titular</th><th>Banco</th>
-          <th class="num">Títulos</th><th class="num">Cotización</th>
-          <th class="num">Valoración €</th><th class="num">% cartera</th>
-          <th class="num">Dividendos</th><th class="num">Resultado</th><th class="num">Rentab.</th>
-          <th class="num">Potencial</th>
-        </tr></thead>
-        <tbody id="posBody"></tbody>
-      </table>
-      <div class="empty-note">Ordenadas de mayor a menor valoración · valores en $ convertidos a € al cambio actual.</div>
-    </div>
-  </section>
-
-  <section>
-    <div class="section-head">
-      <div>
-        <div class="section-title">Titulares y bancos de este grupo</div>
-        <div class="section-sub">El "subgrupo" es opcional — sirve para desglosar los KPIs (p.ej. "Nosotros" / "Niños"). Déjalo vacío si no lo necesitas.</div>
-      </div>
-    </div>
-    <div class="table-wrap">
-      <table class="narrow">
-        <thead><tr class="et"><th>Titular</th><th>Subgrupo (para KPIs)</th><th></th></tr></thead>
-        <tbody class="et" id="titularesBody"></tbody>
-      </table>
-      <div class="empty-note"><button class="btn small ghost" id="addTitularBtn">+ Añadir titular</button></div>
-    </div>
-    <div style="height:16px;"></div>
-    <div class="chips" id="bancosChips"></div>
-    <div class="addchip" style="margin-top:12px;">
-      <input id="newBancoInput" placeholder="Nombre del banco">
-      <button class="btn small ghost" id="addBancoBtn">+ Añadir banco</button>
-    </div>
-  </section>
-
-  <section>
-    <div class="section-head">
-      <div>
         <div class="section-title">Movimientos registrados</div>
         <div class="section-sub">Editable directamente — corrige cualquier error aquí mismo.</div>
       </div>
-      <button class="btn ghost small" id="toggleRawBtn">Ocultar</button>
     </div>
-    <div id="rawContainer">
-      <div class="table-wrap">
-        <table>
-          <thead><tr class="et">
-            <th>Fecha</th><th>Titular</th><th>Banco</th><th>Valor</th><th>Operación</th>
-            <th class="num">Títulos</th><th class="num">Precio</th><th class="num">Importe</th><th></th>
-          </tr></thead>
-          <tbody class="et" id="rawBody"></tbody>
-        </table>
-        <div class="empty-note"><button class="btn small ghost" id="addRowBtn">+ Añadir fila</button></div>
-      </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr class="et">
+          <th>Fecha</th><th>Titular</th><th>Banco</th><th>Valor</th><th>Operación</th>
+          <th class="num">Títulos</th><th class="num">Precio</th><th class="num">Importe</th><th></th>
+        </tr></thead>
+        <tbody class="et" id="rawBody"></tbody>
+      </table>
+      <div class="empty-note"><button class="btn small ghost" id="addRowBtn">+ Añadir fila</button></div>
     </div>
   </section>
+
+  </div><!-- /datosContainer -->
   </div><!-- /grupoView -->
 
   <div id="valoresView" style="display:none;">
@@ -305,14 +316,14 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
     <div class="section-head">
       <div>
         <div class="section-title">Valores y cotizaciones</div>
-        <div class="section-sub">Compartido entre todos los grupos: ticker, divisa, dividendo, precio objetivo y cierres anuales de cada valor.</div>
+        <div class="section-sub">Compartido entre todos los grupos: ticker, divisa, dividendo y precio objetivo de cada valor. <b>La cotización es siempre la que tú escribes aquí</b> — la app no busca precios en internet ni en ningún mercado real. El botón "Actualizar cotizaciones" de la cabecera simula pequeñas variaciones para probar la app; cuando conectemos una fuente de datos real, esto cambiará.</div>
       </div>
     </div>
     <div class="table-wrap" style="margin-bottom:24px;">
       <table>
         <thead><tr class="et">
           <th>Nombre</th><th>Ticker</th><th>Divisa</th><th>Mercado</th><th>Vehículo</th><th>Sector</th>
-          <th class="num">Cotización</th><th class="num">€/título</th><th>Frecuencia</th><th class="num">Objetivo</th><th></th>
+          <th class="num">Cotización</th><th class="num">Dividendo €/título</th><th>Frecuencia dividendo</th><th class="num">Objetivo</th><th></th>
         </tr></thead>
         <tbody class="et" id="secBody"></tbody>
       </table>
@@ -404,8 +415,8 @@ function defaultData(){
       grupo1: {
         nombre: 'Familia',
         titulares: [
-          {nombre:'Titular 1', sub:'Grupo A'}, {nombre:'Titular 2', sub:'Grupo A'},
-          {nombre:'Titular 3', sub:'Grupo B'}, {nombre:'Titular 4', sub:'Grupo B'}, {nombre:'Titular 5', sub:'Grupo B'}
+          {nombre:'Titular 1', sub:'Bloque A'}, {nombre:'Titular 2', sub:'Bloque A'},
+          {nombre:'Titular 3', sub:'Bloque B'}, {nombre:'Titular 4', sub:'Bloque B'}, {nombre:'Titular 5', sub:'Bloque B'}
         ],
         bancos: ['CaixaBank','Santander','Bankinter','Renta4','Adbank'],
         moves: [
@@ -425,10 +436,10 @@ function defaultData(){
           {titular:'Titular 3', banco:'Bankinter', saldo:1200},
         ],
         dismissed: [],
-        rawVisible: true,
+        datosVisible: true,
       },
-      grupo2: { nombre:'Grupo 2', titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], moves:[], cashBalances:[], dismissed:[], rawVisible:true },
-      grupo3: { nombre:'Grupo 3', titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], moves:[], cashBalances:[], dismissed:[], rawVisible:true },
+      grupo2: { nombre:'Grupo 2', titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], moves:[], cashBalances:[], dismissed:[], datosVisible:true },
+      grupo3: { nombre:'Grupo 3', titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], moves:[], cashBalances:[], dismissed:[], datosVisible:true },
     }
   };
 }
@@ -590,7 +601,7 @@ function renderGroupTabs(){
     const nombre = prompt('Nombre del nuevo grupo de inversión:');
     if(!nombre || !nombre.trim()) return;
     const gid = 'grupo_' + Date.now();
-    DB.grupos[gid] = {nombre:nombre.trim(), titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], moves:[], cashBalances:[], dismissed:[], rawVisible:true};
+    DB.grupos[gid] = {nombre:nombre.trim(), titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], moves:[], cashBalances:[], dismissed:[], datosVisible:true};
     DB.activeGrupo = gid; currentView='grupo';
     saveAll(); render();
   };
@@ -723,17 +734,60 @@ function portfolioValueAtDate(dateEnd, isCurrent, year){
   });
   return total;
 }
-function renderEvolution(){
-  const ends = periodEnds();
-  const series = ends.map(e=> ({period:e.label, value: portfolioValueAtDate(e.date, e.isCurrent, e.year)})).reverse();
-  const max = Math.max(...series.map(s=>s.value), 1);
-  const rows = series.map(s=>`
-    <div class="bar-row evo"><div class="bar-name">${s.period}</div>
-      <div class="bar-track"><div class="bar-fill inv" style="width:${Math.max(0,(s.value/max*100)).toFixed(1)}%"></div></div>
-      <div class="bar-val"><b>${eur(s.value)}</b></div>
-    </div>`).join('');
-  document.getElementById('evoChart').innerHTML = rows || '<div class="empty-note">Sin movimientos todavía.</div>';
+let evoRange = '10'; // '10' | 'all'
+function fmtAxis(n){
+  if(n>=1000) return Math.round(n/1000)+'k €';
+  return eur(n);
 }
+function renderEvolution(){
+  const ends = periodEnds(); // ascendente por año
+  let series = ends.map(e=> ({period:e.label, value: portfolioValueAtDate(e.date, e.isCurrent, e.year)}));
+  document.getElementById('evoRangeToggle').style.display = series.length > 10 ? '' : 'none';
+  if(evoRange==='10' && series.length > 10) series = series.slice(-10);
+
+  const wrap = document.getElementById('evoChart');
+  if(!series.length){ wrap.innerHTML = '<div class="empty-note">Sin movimientos todavía.</div>'; return; }
+
+  const w = 900, h = 280, padL = 64, padR = 16, padT = 16, padB = 34;
+  const innerW = w - padL - padR, innerH = h - padT - padB;
+  const maxVal = Math.max(...series.map(s=>s.value), 1);
+  const n = series.length;
+  const gap = innerW / n;
+  const barW = Math.min(56, gap * 0.55);
+
+  let grid = '';
+  for(let i=0;i<=4;i++){
+    const y = padT + innerH - (innerH*i/4);
+    const val = maxVal*i/4;
+    grid += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${w-padR}" y2="${y.toFixed(1)}" stroke="#E4DDC8" stroke-width="1"/>
+      <text x="${padL-8}" y="${(y+4).toFixed(1)}" text-anchor="end" font-size="10.5" fill="#847C68" font-family="'IBM Plex Mono',monospace">${fmtAxis(val)}</text>`;
+  }
+  const bars = series.map((s,i)=>{
+    const x = padL + i*gap + (gap-barW)/2;
+    const barH = maxVal ? (s.value/maxVal*innerH) : 0;
+    const y = padT + innerH - barH;
+    return `<g>
+      <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(barH,1).toFixed(1)}" fill="url(#evoGrad)" rx="2"/>
+      <text x="${(x+barW/2).toFixed(1)}" y="${(y-8).toFixed(1)}" text-anchor="middle" font-size="10.5" fill="#232821" font-family="'IBM Plex Mono',monospace">${fmtAxis(s.value)}</text>
+      <text x="${(x+barW/2).toFixed(1)}" y="${h-padB+18}" text-anchor="middle" font-size="11.5" fill="#847C68" font-family="'IBM Plex Mono',monospace" font-weight="600">${s.period}</text>
+    </g>`;
+  }).join('');
+
+  wrap.innerHTML = `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block;">
+    <defs><linearGradient id="evoGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#C89A3E"/><stop offset="100%" stop-color="#A9812E"/>
+    </linearGradient></defs>
+    ${grid}
+    <line x1="${padL}" y1="${padT+innerH}" x2="${w-padR}" y2="${padT+innerH}" stroke="#C9BE9C" stroke-width="1.5"/>
+    ${bars}
+  </svg>`;
+}
+document.getElementById('evoRangeToggle').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if(!btn) return;
+  evoRange = btn.dataset.r;
+  [...document.querySelectorAll('#evoRangeToggle button')].forEach(b=>b.classList.toggle('active', b===btn));
+  renderEvolution();
+});
 function renderYearClose(){
   const years = closedYearsAllGroups();
   const wrap = document.getElementById('yearCloseWrap');
@@ -1017,10 +1071,10 @@ document.getElementById('addRowBtn').onclick = ()=>{
   G().moves.push({titular:G().titulares[0].nombre, banco:G().bancos[0], valor:DB.securities[0].nombre, operacion:'Comp-Vent', fecha:new Date().toISOString().slice(0,10), titulos:0, precio:0});
   saveAll(); render();
 };
-document.getElementById('toggleRawBtn').onclick = ()=>{
-  G().rawVisible = !G().rawVisible;
-  document.getElementById('rawContainer').style.display = G().rawVisible ? '' : 'none';
-  document.getElementById('toggleRawBtn').textContent = G().rawVisible ? 'Ocultar' : 'Mostrar';
+document.getElementById('toggleDatosBtn').onclick = ()=>{
+  G().datosVisible = !G().datosVisible;
+  document.getElementById('datosContainer').style.display = G().datosVisible ? '' : 'none';
+  document.getElementById('toggleDatosBtn').textContent = G().datosVisible ? 'Ocultar' : 'Mostrar';
   saveAll();
 };
 
@@ -1130,13 +1184,14 @@ document.getElementById('saveModal').onclick = ()=>{
 
 // ---- Arranque ----
 loadAll();
-document.getElementById('rawContainer').style.display = G().rawVisible===false ? 'none' : '';
-document.getElementById('toggleRawBtn').textContent = G().rawVisible===false ? 'Mostrar' : 'Ocultar';
+document.getElementById('datosContainer').style.display = G().datosVisible===false ? 'none' : '';
+document.getElementById('toggleDatosBtn').textContent = G().datosVisible===false ? 'Mostrar' : 'Ocultar';
 if(!storageOk) showStorageBanner();
 render();
 </script>
 </body>
 </html>
+
 
 
 
