@@ -32,6 +32,7 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',sans-se
 .grouptabs button.gtab{background:var(--panel);border:1px solid var(--line);color:var(--text-dim);font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:9px 16px;border-radius:20px;cursor:pointer;}
 .grouptabs button.gtab.active{background:var(--brass);color:#fff;border-color:var(--brass);font-weight:600;}
 .grouptabs .gtab-add{background:transparent;border:1px dashed var(--line);color:var(--text-dim);}
+#valoresTab{border-style:dashed;}
 
 header{padding:20px 32px 24px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;}
 .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--brass);margin:0 0 10px;display:flex;align-items:center;gap:10px;}
@@ -180,6 +181,7 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
   </header>
 
   <div class="group-toggle" id="groupToggle"></div>
+  <div id="grupoView">
   <div class="kpis" id="kpis"></div>
 
   <section>
@@ -278,30 +280,6 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
   <section>
     <div class="section-head">
       <div>
-        <div class="section-title">Valores y cotizaciones</div>
-        <div class="section-sub">Compartido entre todos los grupos: ticker, divisa, dividendo, precio objetivo y cierres anuales de cada valor.</div>
-      </div>
-      <button class="btn ghost small" id="toggleValoresBtn">Ocultar</button>
-    </div>
-    <div id="valoresContainer">
-      <div class="table-wrap" style="margin-bottom:24px;">
-        <table>
-          <thead><tr class="et">
-            <th>Nombre</th><th>Ticker</th><th>Divisa</th><th>Mercado</th><th>Vehículo</th><th>Sector</th>
-            <th class="num">Cotización</th><th class="num">€/título</th><th>Frecuencia</th><th class="num">Objetivo</th><th></th>
-          </tr></thead>
-          <tbody class="et" id="secBody"></tbody>
-        </table>
-        <div class="empty-note"><button class="btn small ghost" id="addSecBtn">+ Añadir valor</button></div>
-      </div>
-      <div class="section-sub" style="margin-bottom:12px;">Cotizaciones de cierre anual (31 de diciembre, divisa nativa de cada valor):</div>
-      <div class="table-wrap" id="yearCloseWrap"></div>
-    </div>
-  </section>
-
-  <section>
-    <div class="section-head">
-      <div>
         <div class="section-title">Movimientos registrados</div>
         <div class="section-sub">Editable directamente — corrige cualquier error aquí mismo.</div>
       </div>
@@ -320,6 +298,30 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
       </div>
     </div>
   </section>
+  </div><!-- /grupoView -->
+
+  <div id="valoresView" style="display:none;">
+  <section style="padding-top:8px;">
+    <div class="section-head">
+      <div>
+        <div class="section-title">Valores y cotizaciones</div>
+        <div class="section-sub">Compartido entre todos los grupos: ticker, divisa, dividendo, precio objetivo y cierres anuales de cada valor.</div>
+      </div>
+    </div>
+    <div class="table-wrap" style="margin-bottom:24px;">
+      <table>
+        <thead><tr class="et">
+          <th>Nombre</th><th>Ticker</th><th>Divisa</th><th>Mercado</th><th>Vehículo</th><th>Sector</th>
+          <th class="num">Cotización</th><th class="num">€/título</th><th>Frecuencia</th><th class="num">Objetivo</th><th></th>
+        </tr></thead>
+        <tbody class="et" id="secBody"></tbody>
+      </table>
+      <div class="empty-note"><button class="btn small ghost" id="addSecBtn">+ Añadir valor</button></div>
+    </div>
+    <div class="section-sub" style="margin-bottom:12px;">Cotizaciones de cierre anual (31 de diciembre, divisa nativa de cada valor):</div>
+    <div class="table-wrap" id="yearCloseWrap"></div>
+  </section>
+  </div><!-- /valoresView -->
 
   <footer>
     Los datos se guardan en el navegador (localStorage) de este dispositivo — no viajan a ningún servidor. Haz copia de seguridad (botón de arriba) de vez en cuando: si borras datos de navegación o cambias de navegador, se pierde lo que no esté respaldado en un archivo.
@@ -436,6 +438,7 @@ let storageOk = true;
 let mode = 'titular';
 let filterTit = 'Todos';
 let kpiGroup = 'Total';
+let currentView = 'grupo'; // 'grupo' | 'valores'
 
 function G(){ return DB.grupos[DB.activeGrupo]; }
 const EURUSD_BASELINE = 1.08;
@@ -531,20 +534,27 @@ function groupXirr(pos, filterFn){
 // ---- Render principal ----
 function render(){
   renderGroupTabs();
-  document.getElementById('groupEyebrow').textContent = 'Patrimonio · ' + G().nombre;
+  document.getElementById('grupoView').style.display = currentView==='valores' ? 'none' : '';
+  document.getElementById('valoresView').style.display = currentView==='valores' ? '' : 'none';
+  document.getElementById('groupToggle').style.display = currentView==='valores' ? 'none' : '';
+  document.getElementById('openModal').style.display = currentView==='valores' ? 'none' : '';
+  document.getElementById('groupEyebrow').textContent = currentView==='valores' ? 'Patrimonio · Valores y cotizaciones (global)' : 'Patrimonio · ' + G().nombre;
   renderTicker();
-  renderKpiToggle();
-  renderKpis();
-  renderBreakdown(positions());
-  renderEvolution();
-  renderYearClose();
-  renderCash();
-  renderPending();
-  renderFilterOptions(positions());
-  renderTable(positions());
-  renderSecurities();
-  renderTitularesBancos();
-  renderRaw();
+  if(currentView==='valores'){
+    renderSecurities();
+    renderYearClose();
+  } else {
+    renderKpiToggle();
+    renderKpis();
+    renderBreakdown(positions());
+    renderEvolution();
+    renderCash();
+    renderPending();
+    renderFilterOptions(positions());
+    renderTable(positions());
+    renderTitularesBancos();
+    renderRaw();
+  }
   document.getElementById('lastUpdate').textContent = DB.lastUpdateTs
     ? 'Actualizado: ' + new Date(DB.lastUpdateTs).toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
     : 'Cotizaciones sin actualizar todavía';
@@ -555,18 +565,22 @@ function renderGroupTabs(){
   const wrap = document.getElementById('grouptabs');
   const tabs = Object.keys(DB.grupos).map(gid=>{
     const g = DB.grupos[gid];
-    const active = gid===DB.activeGrupo;
+    const active = gid===DB.activeGrupo && currentView==='grupo';
     return `<button class="gtab ${active?'active':''}" data-gid="${gid}">${g.nombre}${active?' ✎':''}</button>`;
   }).join('');
-  wrap.innerHTML = tabs + '<button class="gtab gtab-add" id="addGrupoBtn">+ Añadir grupo</button>';
+  const valoresActive = currentView==='valores';
+  wrap.innerHTML = tabs
+    + `<button class="gtab gtab-add" id="addGrupoBtn">+ Añadir grupo</button>`
+    + `<span style="flex:1 1 auto;min-width:12px;"></span>`
+    + `<button class="gtab ${valoresActive?'active':''}" id="valoresTab">⚙ Valores y cotizaciones</button>`;
   wrap.querySelectorAll('.gtab[data-gid]').forEach(btn=>{
     btn.onclick = ()=>{
       const gid = btn.dataset.gid;
-      if(gid === DB.activeGrupo){
+      if(gid === DB.activeGrupo && currentView==='grupo'){
         const nuevo = prompt('Nombre del grupo:', DB.grupos[gid].nombre);
         if(nuevo && nuevo.trim()){ DB.grupos[gid].nombre = nuevo.trim(); saveAll(); }
       } else {
-        DB.activeGrupo = gid; filterTit='Todos'; kpiGroup='Total'; mode='titular';
+        DB.activeGrupo = gid; currentView='grupo'; filterTit='Todos'; kpiGroup='Total'; mode='titular';
         saveAll();
       }
       render();
@@ -576,15 +590,16 @@ function renderGroupTabs(){
     const nombre = prompt('Nombre del nuevo grupo de inversión:');
     if(!nombre || !nombre.trim()) return;
     const gid = 'grupo_' + Date.now();
-    DB.grupos[gid] = {nombre:nombre.trim(), titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], securities:[], moves:[], cashBalances:[], yearEndClose:{}, dismissed:[], rawVisible:true};
-    DB.activeGrupo = gid;
+    DB.grupos[gid] = {nombre:nombre.trim(), titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], moves:[], cashBalances:[], dismissed:[], rawVisible:true};
+    DB.activeGrupo = gid; currentView='grupo';
     saveAll(); render();
   };
+  document.getElementById('valoresTab').onclick = ()=>{ currentView='valores'; render(); };
 }
 
 function renderTicker(){
   const usados = new Set(G().moves.map(m=>m.valor));
-  const list = DB.securities.filter(s=>usados.has(s.nombre));
+  const list = currentView==='valores' ? DB.securities : DB.securities.filter(s=>usados.has(s.nombre));
   const items = list.map(s=>{
     const sym = s.moneda==='USD' ? '$' : '€';
     const diff = ((s.quote-s.baseline)/s.baseline*100);
@@ -1008,12 +1023,7 @@ document.getElementById('toggleRawBtn').onclick = ()=>{
   document.getElementById('toggleRawBtn').textContent = G().rawVisible ? 'Ocultar' : 'Mostrar';
   saveAll();
 };
-document.getElementById('toggleValoresBtn').onclick = ()=>{
-  DB.valoresVisible = DB.valoresVisible===false ? true : false;
-  document.getElementById('valoresContainer').style.display = DB.valoresVisible===false ? 'none' : '';
-  document.getElementById('toggleValoresBtn').textContent = DB.valoresVisible===false ? 'Mostrar' : 'Ocultar';
-  saveAll();
-};
+
 
 document.getElementById('breakdownToggle').addEventListener('click', e=>{
   const btn = e.target.closest('button'); if(!btn) return;
@@ -1122,13 +1132,12 @@ document.getElementById('saveModal').onclick = ()=>{
 loadAll();
 document.getElementById('rawContainer').style.display = G().rawVisible===false ? 'none' : '';
 document.getElementById('toggleRawBtn').textContent = G().rawVisible===false ? 'Mostrar' : 'Ocultar';
-document.getElementById('valoresContainer').style.display = DB.valoresVisible===false ? 'none' : '';
-document.getElementById('toggleValoresBtn').textContent = DB.valoresVisible===false ? 'Mostrar' : 'Ocultar';
 if(!storageOk) showStorageBanner();
 render();
 </script>
 </body>
 </html>
+
 
 
 
