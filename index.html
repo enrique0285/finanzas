@@ -96,9 +96,9 @@ tbody td.name{font-family:'Inter',sans-serif;font-weight:600;font-size:13.5px;}
 tbody tr:hover{background:var(--panel-2);}
 .tag{font-family:'Inter',sans-serif;font-size:10.5px;padding:3px 8px;border-radius:20px;border:1px solid var(--line);color:var(--text-dim);}
 .num{text-align:right;}
-tr.group-row td{background:var(--panel-2);font-family:'IBM Plex Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);padding:9px 14px;border-bottom:1px solid var(--line);}
-tr.group-row span{display:inline-block;}
-tr.group-row span:first-child{font-weight:600;color:var(--text);margin-right:14px;}
+tr.group-row td{background:var(--panel-2);font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line);border-top:1px solid var(--line);}
+tr.group-row td:first-child{font-family:'Inter',sans-serif;text-transform:uppercase;font-size:11px;letter-spacing:.06em;}
+tr.group-row .group-count{color:var(--text-dim);font-family:'IBM Plex Mono',monospace;text-transform:none;letter-spacing:0;}
 tr.group-row:hover td{background:var(--panel-2);}
 .empty-note{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-dim);padding:13px 14px;border-top:1px dashed var(--line);}
 
@@ -402,6 +402,7 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
 <script>
 const eur = n => (n<0?'-':'') + '€' + Math.abs(n).toLocaleString('es-ES',{minimumFractionDigits:0,maximumFractionDigits:0});
 const pct = n => (isFinite(n) ? (n*100).toFixed(1).replace('.',',') + '%' : 'n/d');
+const fmtNum = (n, dec=2) => isFinite(n) ? n.toLocaleString('es-ES',{minimumFractionDigits:dec,maximumFractionDigits:dec}) : 'n/d';
 const FREQ_LABEL = {0:'Irregular',1:'Anual',2:'Semestral',4:'Trimestral'};
 const STORAGE_KEY = 'patrimonio_app_v1';
 
@@ -561,6 +562,19 @@ function positionXirr(valor, filterFn, titulosActuales){
   cfs.push({date:new Date(), amount: titulosActuales*q});
   return xirr(cfs);
 }
+function valoresXirr(valores, filterFn, valoracionTotal){
+  const set = new Set(valores);
+  const cfs = G().moves.filter(filterFn).filter(m=>set.has(m.valor) && m.fecha).map(m=>{
+    const s = sec(m.valor); const moneda = s ? s.moneda : 'EUR';
+    const date = new Date(m.fecha);
+    let amount = 0;
+    if(m.operacion === 'Comp-Vent') amount = -toEurAmt((+m.titulos||0)*(+m.precio||0), moneda);
+    else if(m.operacion === 'Dividendos') amount = toEurAmt((+m.importe||0), moneda);
+    return {date, amount};
+  });
+  cfs.push({date:new Date(), amount: valoracionTotal});
+  return xirr(cfs);
+}
 
 function xirr(cashflows){
   if(cashflows.length<2) return NaN;
@@ -669,11 +683,11 @@ function renderTicker(){
     const sym = s.moneda==='USD' ? '$' : '€';
     const diff = ((s.quote-s.baseline)/s.baseline*100);
     const cls = diff>=0?'up':'down', arrow = diff>=0?'▲':'▼';
-    return `<div class="tick"><span class="sym">${s.nombre} <small>${s.ticker}</small></span><span>${sym}${s.quote.toFixed(2)}</span><span class="${cls}">${arrow} ${Math.abs(diff).toFixed(2)}%</span><span class="dot"></span></div>`;
+    return `<div class="tick"><span class="sym">${s.nombre} <small>${s.ticker}</small></span><span>${sym}${fmtNum(s.quote,2)}</span><span class="${cls}">${arrow} ${fmtNum(Math.abs(diff),2)}%</span><span class="dot"></span></div>`;
   });
   const fxDiff = ((DB.eurUsd-EURUSD_BASELINE)/EURUSD_BASELINE*100);
   const fxCls = fxDiff>=0?'up':'down', fxArrow = fxDiff>=0?'▲':'▼';
-  items.push(`<div class="tick fx"><span class="sym">EUR/USD</span><span>${DB.eurUsd.toFixed(4)}</span><span class="${fxCls}">${fxArrow} ${Math.abs(fxDiff).toFixed(2)}%</span><span class="dot"></span></div>`);
+  items.push(`<div class="tick fx"><span class="sym">EUR/USD</span><span>${fmtNum(DB.eurUsd,4)}</span><span class="${fxCls}">${fxArrow} ${fmtNum(Math.abs(fxDiff),2)}%</span><span class="dot"></span></div>`);
   const html = items.join('') || '<div class="tick"><span class="sym">Sin valores todavía</span></div>';
   document.getElementById('tickerTrack').innerHTML = html+html;
 }
@@ -705,6 +719,7 @@ function renderKpis(){
     const s = sec(p.valor);
     if(s && s.objetivo>0){ potencialEur += toEurAmt(p.titulos*(s.objetivo - s.quote), s.moneda); }
   });
+  const potencialPct = valoracion ? potencialEur/valoracion : NaN;
   document.getElementById('kpis').innerHTML = `
     <div class="kpi"><div class="label">Patrimonio${kpiGroup!=='Total'?' · '+kpiGroup:''}</div><div class="value">${eur(valoracion)}</div><div class="sub">${pos.length} posiciones</div></div>
     <div class="kpi"><div class="label">Resultado</div><div class="value ${resultado>=0?'pos':'neg'}">${eur(resultado)}</div><div class="sub">incl. dividendos</div></div>
@@ -713,6 +728,7 @@ function renderKpis(){
     <div class="kpi"><div class="label">Dividendos cobrados</div><div class="value">${eur(dividendos)}</div><div class="sub">histórico, en efectivo</div></div>
     <div class="kpi"><div class="label">% invertido</div><div class="value">${pct(pctInvertido)}</div><div class="sub">${eur(efectivo)} en efectivo</div></div>
     <div class="kpi"><div class="label">Potencial</div><div class="value ${potencialEur>=0?'pos':'neg'}">${eur(potencialEur)}</div><div class="sub">hasta precio objetivo</div></div>
+    <div class="kpi"><div class="label">Potencial %</div><div class="value ${potencialPct>=0?'pos':'neg'}">${pct(potencialPct)}</div><div class="sub">sobre valoración actual</div></div>
   `;
 }
 
@@ -923,7 +939,7 @@ function renderTable(){
     const potencial = (s && s.objetivo>0) ? (s.objetivo - s.quote)/s.quote : NaN;
     const tir = positionXirr(p.valor, fn, p.titulos);
     return `<tr><td class="name">${p.valor}</td>
-      <td class="num">${p.titulos.toLocaleString('es-ES')}</td><td class="num">${(s?s.quote:p.q).toFixed(3)}${s&&s.moneda==='USD'?' $':''}</td>
+      <td class="num">${p.titulos.toLocaleString('es-ES')}</td><td class="num">${s&&s.moneda==='USD'?'$':'€'}${fmtNum(s?s.quote:p.q,3)}</td>
       <td class="num">${eur(p.val)}</td><td class="num">${pct(peso)}</td>
       <td class="num">${eur(p.dividendos)}</td>
       <td class="num ${resultado>=0?'pos':'neg'}">${eur(resultado)}</td>
@@ -942,7 +958,27 @@ function renderTable(){
   groupNames.forEach(name=>{
     const items = groups[name].sort((a,b)=> b.val - a.val);
     const subtotal = items.reduce((s,p)=>s+p.val,0);
-    rows += `<tr class="group-row"><td colspan="10"><span>${name}</span><span class="group-sub">${items.length} · ${eur(subtotal)} · ${pct(total?subtotal/total:0)}</span></td></tr>`;
+    const subCoste = items.reduce((s,p)=>s+p.coste,0);
+    const subDiv = items.reduce((s,p)=>s+p.dividendos,0);
+    const subResultado = subtotal - subCoste + subDiv;
+    const subRent = subCoste ? subResultado/subCoste : NaN;
+    const subTir = valoresXirr(items.map(p=>p.valor), fn, subtotal);
+    let subPotEur = 0, hayObjetivo = false;
+    items.forEach(p=>{
+      const s = sec(p.valor);
+      if(s && s.objetivo>0){ hayObjetivo = true; subPotEur += toEurAmt(p.titulos*(s.objetivo - s.quote), s.moneda); }
+    });
+    const subPot = hayObjetivo ? subPotEur/subtotal : NaN;
+    rows += `<tr class="group-row">
+      <td>${name} <span class="group-count">· ${items.length}</span></td>
+      <td class="num">—</td><td class="num">—</td>
+      <td class="num">${eur(subtotal)}</td><td class="num">${pct(total?subtotal/total:0)}</td>
+      <td class="num">${eur(subDiv)}</td>
+      <td class="num ${subResultado>=0?'pos':'neg'}">${eur(subResultado)}</td>
+      <td class="num ${subRent>=0?'pos':'neg'}">${pct(subRent)}</td>
+      <td class="num ${isFinite(subTir)?(subTir>=0?'pos':'neg'):''}">${pct(subTir)}</td>
+      <td class="num ${isFinite(subPot)?(subPot>=0?'pos':'neg'):''}">${pct(subPot)}</td>
+    </tr>`;
     items.forEach(p=>{ rows += rowHtml(p); });
   });
   document.getElementById('posBody').innerHTML = rows || '<tr><td colspan="10" class="empty-note">Sin posiciones para este filtro.</td></tr>';
@@ -1298,6 +1334,7 @@ render();
 </script>
 </body>
 </html>
+
 
 
 
