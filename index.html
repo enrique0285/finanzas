@@ -696,8 +696,9 @@ function renderGroupTabs(){
 }
 
 function renderTicker(){
-  const usados = new Set(G().moves.map(m=>m.valor));
-  const list = currentView==='valores' ? DB.securities : DB.securities.filter(s=>usados.has(s.nombre));
+  const list = currentView==='valores'
+    ? DB.securities.filter(s=>isValorActivo(s.nombre))
+    : DB.securities.filter(s=>isValorActivoEnGrupo(s.nombre));
   const items = list.map(s=>{
     const sym = s.moneda==='USD' ? '$' : '€';
     const diff = s.baseline ? ((s.quote-s.baseline)/s.baseline*100) : 0;
@@ -1118,6 +1119,11 @@ function isValorActivo(nombre){
     g.moves.forEach(m=>{ if(m.valor===nombre && m.operacion==='Comp-Vent') sum += (+m.titulos||0); });
     return Math.abs(sum) > 0.001;
   });
+}
+function isValorActivoEnGrupo(nombre){
+  let sum = 0;
+  G().moves.forEach(m=>{ if(m.valor===nombre && m.operacion==='Comp-Vent') sum += (+m.titulos||0); });
+  return Math.abs(sum) > 0.001;
 }
 function securitiesOrdenados(){
   return DB.securities
@@ -1641,6 +1647,7 @@ render();
 </script>
 </body>
 </html>
+
 
 
 
