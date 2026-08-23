@@ -146,8 +146,8 @@ tr.group-row:hover td{background:var(--panel-2);}
 .storage-banner{margin:20px 32px 0;padding:12px 16px;border:1px solid var(--brass);background:rgba(169,129,46,.08);font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-dim);border-radius:2px;display:none;}
 .storage-banner.show{display:block;}
 
-.divider{display:flex;align-items:center;gap:14px;margin:44px 32px 0;padding-top:24px;border-top:1px solid var(--line);}
-.divider span{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);white-space:nowrap;}
+.divider{display:flex;align-items:center;gap:14px;margin:44px 32px 0;padding-top:24px;border-top:2px solid var(--brass);}
+.divider span{font-family:'Fraunces',serif;font-size:19px;font-weight:600;letter-spacing:.01em;color:var(--text);white-space:nowrap;}
 .divider button{margin-left:auto;}
 
 footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-dim);line-height:1.6;}
@@ -290,7 +290,7 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
     <div class="section-head">
       <div>
         <div class="section-title">Dividendos por revisar</div>
-        <div class="section-sub">Calculados según la frecuencia de pago de cada valor — revisa el importe y la fecha y confirma antes de que se añadan.</div>
+        <div class="section-sub">Estimación, no un calendario real de dividendos: cuenta "cada X meses desde el último que registraste". Si llevas varios periodos sin meter dividendos de un valor, verás una tarjeta por cada uno que falte. Revisa importe y fecha antes de confirmar.</div>
       </div>
     </div>
     <div id="pendingWrap"></div>
@@ -300,8 +300,18 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
     <div class="section-head">
       <div>
         <div class="section-title">Movimientos registrados</div>
-        <div class="section-sub">Editable directamente — corrige cualquier error aquí mismo.</div>
+        <div class="section-sub" id="rawCount">Editable directamente — corrige cualquier error aquí mismo.</div>
       </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+      <select class="filter" id="movFilterTitular"></select>
+      <select class="filter" id="movFilterBanco"></select>
+      <select class="filter" id="movFilterValor"></select>
+      <select class="filter" id="movFilterOp">
+        <option value="Todos">Todas las operaciones</option>
+        <option value="Comp-Vent">Comp-Vent</option>
+        <option value="Dividendos">Dividendos</option>
+      </select>
     </div>
     <div class="table-wrap">
       <table>
@@ -660,6 +670,7 @@ function renderGroupTabs(){
         if(nuevo && nuevo.trim()){ DB.grupos[gid].nombre = nuevo.trim(); saveAll(); }
       } else {
         DB.activeGrupo = gid; currentView='grupo'; filterTit='Todos'; filterBanco='Todos'; kpiGroup='Total'; mode='titular';
+        movFilterTit='Todos'; movFilterBanco='Todos'; movFilterValor='Todos'; movFilterOp='Todos';
         saveAll();
       }
       render();
@@ -987,20 +998,25 @@ function renderTable(){
 function pendingDividends(){
   const pos = positions();
   const out = [];
+  const MAX_POR_VALOR = 12; // límite de seguridad si llevas muchos periodos sin registrar
   pos.forEach(p=>{
     const s = sec(p.valor);
     if(!s || !s.freq || s.div<=0) return;
-    const key = p.titular+'|'+p.banco+'|'+p.valor;
-    if(G().dismissed.includes(key)) return;
     const divMoves = G().moves.filter(m=>m.titular===p.titular && m.banco===p.banco && m.valor===p.valor && m.operacion==='Dividendos');
     const buyMoves = G().moves.filter(m=>m.titular===p.titular && m.banco===p.banco && m.valor===p.valor && m.operacion==='Comp-Vent');
     const lastDate = divMoves.length ? new Date(Math.max(...divMoves.map(m=>new Date(m.fecha)))) : new Date(Math.min(...buyMoves.map(m=>new Date(m.fecha))));
     const periodDays = 365/s.freq;
-    const next = new Date(lastDate.getTime() + periodDays*86400000);
-    if(next <= new Date()){
-      out.push({key, titular:p.titular, banco:p.banco, valor:p.valor, titulos:p.titulos,
-        fecha: next.toISOString().slice(0,10), perShare: (s.div/s.freq).toFixed(4),
-        cotizacion: s.quote, moneda: s.moneda, freqLabel: FREQ_LABEL[s.freq]});
+    let n = 1, next = new Date(lastDate.getTime() + periodDays*86400000);
+    while(next <= new Date() && n <= MAX_POR_VALOR){
+      const fechaStr = next.toISOString().slice(0,10);
+      const key = p.titular+'|'+p.banco+'|'+p.valor+'|'+fechaStr;
+      if(!G().dismissed.includes(key)){
+        out.push({key, titular:p.titular, banco:p.banco, valor:p.valor, titulos:p.titulos,
+          fecha: fechaStr, perShare: (s.div/s.freq).toFixed(4),
+          cotizacion: s.quote, moneda: s.moneda, freqLabel: FREQ_LABEL[s.freq]});
+      }
+      n++;
+      next = new Date(lastDate.getTime() + n*periodDays*86400000);
     }
   });
   return out;
@@ -1153,8 +1169,30 @@ document.getElementById('addBancoBtn').onclick = ()=>{
   saveAll(); render();
 };
 
+let movFilterTit = 'Todos', movFilterBanco = 'Todos', movFilterValor = 'Todos', movFilterOp = 'Todos';
+
+function renderMovFilterOptions(){
+  const selT = document.getElementById('movFilterTitular');
+  selT.innerHTML = ['Todos', ...G().titulares.map(t=>t.nombre)].map(t=>`<option value="${t}" ${t===movFilterTit?'selected':''}>${t==='Todos'?'Todos los titulares':t}</option>`).join('');
+  const selB = document.getElementById('movFilterBanco');
+  selB.innerHTML = ['Todos', ...G().bancos].map(b=>`<option value="${b}" ${b===movFilterBanco?'selected':''}>${b==='Todos'?'Todos los bancos':b}</option>`).join('');
+  const selV = document.getElementById('movFilterValor');
+  const valoresUsados = [...new Set(G().moves.map(m=>m.valor))];
+  selV.innerHTML = ['Todos', ...valoresUsados].map(v=>`<option value="${v}" ${v===movFilterValor?'selected':''}>${v==='Todos'?'Todos los valores':v}</option>`).join('');
+  document.getElementById('movFilterOp').value = movFilterOp;
+}
+
 function renderRaw(){
-  const sorted = G().moves.map((m,i)=>({...m, _i:i})).sort((a,b)=> new Date(b.fecha||0) - new Date(a.fecha||0));
+  renderMovFilterOptions();
+  const all = G().moves.map((m,i)=>({...m, _i:i}));
+  const filtered = all.filter(m=>
+    (movFilterTit==='Todos' || m.titular===movFilterTit) &&
+    (movFilterBanco==='Todos' || m.banco===movFilterBanco) &&
+    (movFilterValor==='Todos' || m.valor===movFilterValor) &&
+    (movFilterOp==='Todos' || m.operacion===movFilterOp)
+  );
+  const sorted = filtered.sort((a,b)=> new Date(b.fecha||0) - new Date(a.fecha||0));
+  document.getElementById('rawCount').textContent = `${sorted.length} de ${all.length} movimientos mostrados — editable directamente, corrige cualquier error aquí mismo.`;
   document.getElementById('rawBody').innerHTML = sorted.map(m=>{
     const i = m._i;
     const importe = m.operacion==='Dividendos' ? (m.importe||0) : ((+m.titulos||0)*(+m.precio||0));
@@ -1169,7 +1207,7 @@ function renderRaw(){
       <td class="num">${m.operacion==='Dividendos' ? `<input type="number" step="any" data-f="importe" value="${m.importe||0}">` : `<div class="readonly">${eur(importe)}</div>`}</td>
       <td><button class="btn tiny danger" data-action="del">✕</button></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="9" class="empty-note">Sin movimientos.</td></tr>';
+  }).join('') || '<tr><td colspan="9" class="empty-note">Sin movimientos para este filtro.</td></tr>';
   document.querySelectorAll('#rawBody tr[data-i]').forEach(tr=>{
     const i = +tr.dataset.i;
     tr.querySelectorAll('[data-f]').forEach(input=>{
@@ -1183,6 +1221,10 @@ function renderRaw(){
     if(del) del.onclick = ()=>{ G().moves.splice(i,1); saveAll(); render(); };
   });
 }
+document.getElementById('movFilterTitular').addEventListener('change', e=>{ movFilterTit = e.target.value; renderRaw(); });
+document.getElementById('movFilterBanco').addEventListener('change', e=>{ movFilterBanco = e.target.value; renderRaw(); });
+document.getElementById('movFilterValor').addEventListener('change', e=>{ movFilterValor = e.target.value; renderRaw(); });
+document.getElementById('movFilterOp').addEventListener('change', e=>{ movFilterOp = e.target.value; renderRaw(); });
 document.getElementById('addRowBtn').onclick = ()=>{
   if(!G().titulares.length || !G().bancos.length || !DB.securities.length){ alert('Añade primero titulares, bancos y al menos un valor.'); return; }
   G().moves.push({titular:G().titulares[0].nombre, banco:G().bancos[0], valor:DB.securities[0].nombre, operacion:'Comp-Vent', fecha:new Date().toISOString().slice(0,10), titulos:0, precio:0});
