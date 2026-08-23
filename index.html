@@ -100,6 +100,7 @@ tr.group-row td{background:var(--panel-2);font-family:'IBM Plex Mono',monospace;
 tr.group-row td:first-child{font-family:'Inter',sans-serif;text-transform:uppercase;font-size:11px;letter-spacing:.06em;}
 tr.group-row .group-count{color:var(--text-dim);font-family:'IBM Plex Mono',monospace;text-transform:none;letter-spacing:0;}
 tr.group-row:hover td{background:var(--panel-2);}
+tr.grp td{background:var(--panel-2);font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);padding:8px 12px;border-top:2px solid var(--line);border-bottom:1px solid var(--line);}
 .empty-note{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-dim);padding:13px 14px;border-top:1px dashed var(--line);}
 
 .et input, .et select{background:var(--panel-2); border:1px solid transparent; color:var(--text); font-family:'IBM Plex Mono',monospace; font-size:12.5px; padding:6px 7px; border-radius:2px; width:100%;}
@@ -890,7 +891,7 @@ function renderYearClose(){
   const wrap = document.getElementById('yearCloseWrap');
   if(!years.length || !DB.securities.length){ wrap.innerHTML = '<div class="empty-note">Sin años cerrados todavía.</div>'; return; }
   const head = `<tr><th>Valor</th>${years.map(y=>`<th class="num">${y}</th>`).join('')}</tr>`;
-  const body = DB.securities.map(s=>{
+  const body = [...DB.securities].sort((a,b)=> (isValorActivo(b.nombre)?1:0) - (isValorActivo(a.nombre)?1:0)).map(s=>{
     const cells = years.map(y=>{
       const v = (DB.yearEndClose[s.nombre] && DB.yearEndClose[s.nombre][y] != null) ? DB.yearEndClose[s.nombre][y] : '';
       return `<td class="num"><input type="number" step="any" value="${v}" data-valor="${s.nombre}" data-year="${y}" placeholder="—"></td>`;
@@ -1097,8 +1098,26 @@ function renderPending(){
 function valorOptions(selected){
   return DB.securities.map(s=>`<option value="${s.nombre}" ${s.nombre===selected?'selected':''}>${s.nombre} (${s.ticker||'—'})</option>`).join('');
 }
+function isValorActivo(nombre){
+  return Object.values(DB.grupos).some(g=>{
+    let sum = 0;
+    g.moves.forEach(m=>{ if(m.valor===nombre && m.operacion==='Comp-Vent') sum += (+m.titulos||0); });
+    return Math.abs(sum) > 0.001;
+  });
+}
+function securitiesOrdenados(){
+  return DB.securities
+    .map((s,i)=>({s,i}))
+    .sort((a,b)=> (isValorActivo(b.s.nombre)?1:0) - (isValorActivo(a.s.nombre)?1:0));
+}
 function renderSecurities(){
-  document.getElementById('secBody').innerHTML = DB.securities.map((s,i)=>`
+  const ordenados = securitiesOrdenados();
+  let sepInsertado = false;
+  document.getElementById('secBody').innerHTML = ordenados.map(({s,i})=>{
+    const activo = isValorActivo(s.nombre);
+    let sepRow = '';
+    if(!activo && !sepInsertado){ sepRow = '<tr class="grp"><td colspan="11">Vendidos / sin posición actual</td></tr>'; sepInsertado = true; }
+    return sepRow + `
     <tr data-i="${i}">
       <td><input data-f="nombre" value="${s.nombre}"></td>
       <td><input data-f="ticker" value="${s.ticker}"></td>
@@ -1111,7 +1130,8 @@ function renderSecurities(){
       <td><select data-f="freq">${Object.entries(FREQ_LABEL).map(([v,l])=>`<option value="${v}" ${+v===+s.freq?'selected':''}>${l}</option>`).join('')}</select></td>
       <td class="num"><input type="number" step="any" data-f="objetivo" value="${s.objetivo||0}"></td>
       <td><button class="btn tiny danger" data-action="del">✕</button></td>
-    </tr>`).join('') || '<tr><td colspan="11" class="empty-note">Sin valores todavía en este grupo.</td></tr>';
+    </tr>`;
+  }).join('') || '<tr><td colspan="11" class="empty-note">Sin valores todavía en este grupo.</td></tr>';
   document.querySelectorAll('#secBody tr[data-i]').forEach(tr=>{
     const i = +tr.dataset.i;
     tr.querySelectorAll('[data-f]').forEach(input=>{
