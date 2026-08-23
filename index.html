@@ -181,6 +181,7 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
       </p>
     </div>
     <div class="header-actions">
+      <button class="btn ghost" id="generarInforme">📄 Informe para compartir</button>
       <button class="btn ghost" id="downloadBackup">⬇ Copia de seguridad</button>
       <label class="btn ghost" for="uploadBackup" style="cursor:pointer;">⬆ Cargar copia</label>
       <input type="file" id="uploadBackup" accept="application/json" style="display:none">
@@ -626,6 +627,7 @@ function render(){
   document.getElementById('valoresView').style.display = currentView==='valores' ? '' : 'none';
   document.getElementById('groupToggle').style.display = currentView==='valores' ? 'none' : '';
   document.getElementById('openModal').style.display = currentView==='valores' ? 'none' : '';
+  document.getElementById('generarInforme').style.display = currentView==='valores' ? 'none' : '';
   document.getElementById('groupEyebrow').textContent = currentView==='valores' ? 'Patrimonio · Valores y cotizaciones (global)' : 'Patrimonio · ' + G().nombre;
   renderTicker();
   if(currentView==='valores'){
@@ -1284,6 +1286,103 @@ document.getElementById('refreshBtn').onclick = async (e)=>{
   btn.disabled = false; btn.textContent = orig;
 };
 
+// ---- Informe estático para compartir (foto fija, sin datos en vivo) ----
+document.getElementById('generarInforme').onclick = ()=>{
+  const pos = positions();
+  let valoracion=0, coste=0, dividendos=0;
+  pos.forEach(p=>{ const q = quoteEur(p.valor) || (p.coste/p.titulos); valoracion += p.titulos*q; coste += p.coste; dividendos += p.dividendos; });
+  const resultado = valoracion - coste + dividendos;
+  const rent = coste ? resultado/coste : 0;
+  const tir = groupXirr(pos, ()=>true);
+  const efectivo = G().cashBalances.reduce((s,c)=> s+(+c.saldo||0), 0);
+  const pctInv = (valoracion+efectivo) ? valoracion/(valoracion+efectivo) : NaN;
+
+  const withVal = pos.map(p=>{
+    const q = quoteEur(p.valor) || (p.coste/p.titulos);
+    const val = p.titulos*q;
+    const s = sec(p.valor);
+    return {...p, q, val, vehiculo:(s&&s.vehiculo)||'Sin clasificar'};
+  }).sort((a,b)=>b.val-a.val);
+
+  const groups = {};
+  withVal.forEach(p=>{ (groups[p.vehiculo]=groups[p.vehiculo]||[]).push(p); });
+  const groupNames = Object.keys(groups).sort((a,b)=> groups[b].reduce((s,p)=>s+p.val,0) - groups[a].reduce((s,p)=>s+p.val,0));
+
+  let posRows = '';
+  groupNames.forEach(name=>{
+    const items = groups[name];
+    const subtotal = items.reduce((s,p)=>s+p.val,0);
+    posRows += `<tr class="grp"><td colspan="4">${name} · ${eur(subtotal)}</td></tr>`;
+    items.forEach(p=>{
+      const resu = p.val - p.coste + p.dividendos;
+      posRows += `<tr><td>${p.valor}</td><td class="num">${eur(p.val)}</td><td class="num ${resu>=0?'pos':'neg'}">${eur(resu)}</td><td class="num">${pct(valoracion?p.val/valoracion:0)}</td></tr>`;
+    });
+  });
+
+  const byTit = {}, byBanco = {};
+  withVal.forEach(p=>{ byTit[p.titular]=(byTit[p.titular]||0)+p.val; byBanco[p.banco]=(byBanco[p.banco]||0)+p.val; });
+  const barsHtml = (obj)=>{
+    const max = Math.max(...Object.values(obj), 1);
+    return Object.entries(obj).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`
+      <div class="bar"><div class="bn">${k}</div><div class="bt"><div class="bf" style="width:${(v/max*100).toFixed(1)}%"></div></div><div class="bv">${eur(v)}</div></div>
+    `).join('');
+  };
+
+  const fecha = new Date().toLocaleDateString('es-ES',{day:'2-digit',month:'long',year:'numeric'});
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Informe de patrimonio — ${G().nombre}</title>
+  <style>
+    body{margin:0;background:#F7F3E8;color:#232821;font-family:Georgia,'Times New Roman',serif;}
+    .wrap{max-width:820px;margin:0 auto;padding:48px 32px 64px;}
+    .eyebrow{font-family:monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#A9812E;margin:0 0 8px;}
+    h1{font-size:32px;margin:0 0 4px;}
+    .fecha{font-family:monospace;font-size:12.5px;color:#847C68;margin-bottom:36px;}
+    .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#E4DDC8;border:1px solid #E4DDC8;margin-bottom:40px;}
+    .kpi{background:#fff;padding:18px 16px;}
+    .kpi .l{font-family:monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#847C68;margin-bottom:8px;}
+    .kpi .v{font-size:21px;font-weight:bold;}
+    h2{font-size:19px;border-top:2px solid #A9812E;padding-top:14px;margin-top:40px;}
+    .bar{display:grid;grid-template-columns:130px 1fr 110px;gap:12px;align-items:center;margin-bottom:10px;font-size:13px;}
+    .bt{height:16px;background:#EFE8D6;border-radius:1px;}
+    .bf{height:100%;background:#A9812E;}
+    .bv{text-align:right;font-family:monospace;font-size:12px;color:#847C68;}
+    table{width:100%;border-collapse:collapse;margin-top:12px;}
+    th{text-align:left;font-family:monospace;font-size:10.5px;text-transform:uppercase;color:#847C68;padding:8px 10px;border-bottom:1px solid #E4DDC8;}
+    td{padding:8px 10px;font-size:13.5px;border-bottom:1px solid #E4DDC8;}
+    tr.grp td{background:#EFE8D6;font-weight:bold;font-size:12px;text-transform:uppercase;font-family:monospace;}
+    .num{text-align:right;font-family:monospace;}
+    .pos{color:#3F6B3B;} .neg{color:#A63F3A;}
+    footer{margin-top:48px;font-family:monospace;font-size:11px;color:#847C68;}
+  </style></head><body><div class="wrap">
+    <p class="eyebrow">Informe de patrimonio</p>
+    <h1>${G().nombre}</h1>
+    <p class="fecha">Generado el ${fecha} · datos a esta fecha, no en vivo</p>
+    <div class="kpis">
+      <div class="kpi"><div class="l">Patrimonio</div><div class="v">${eur(valoracion)}</div></div>
+      <div class="kpi"><div class="l">Resultado</div><div class="v">${eur(resultado)}</div></div>
+      <div class="kpi"><div class="l">Rentabilidad</div><div class="v">${pct(rent)}</div></div>
+      <div class="kpi"><div class="l">TIR</div><div class="v">${pct(tir)}</div></div>
+      <div class="kpi"><div class="l">Dividendos cobrados</div><div class="v">${eur(dividendos)}</div></div>
+      <div class="kpi"><div class="l">% invertido</div><div class="v">${pct(pctInv)}</div></div>
+    </div>
+    <h2>Distribución por titular</h2>
+    ${barsHtml(byTit)}
+    <h2>Distribución por banco</h2>
+    ${barsHtml(byBanco)}
+    <h2>Posiciones vivas</h2>
+    <table><thead><tr><th>Valor</th><th class="num">Valoración</th><th class="num">Resultado</th><th class="num">% cartera</th></tr></thead>
+    <tbody>${posRows}</tbody></table>
+    <footer>Documento generado automáticamente — foto fija de este momento, no se actualiza sola.</footer>
+  </div></body></html>`;
+
+  const blob = new Blob([html], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,10);
+  a.href = url; a.download = `informe-${G().nombre.toLowerCase().replace(/\s+/g,'-')}-${stamp}.html`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
 // ---- Backup / restore ----
 document.getElementById('downloadBackup').onclick = ()=>{
   const blob = new Blob([JSON.stringify(DB, null, 2)], {type:'application/json'});
@@ -1376,6 +1475,7 @@ render();
 </script>
 </body>
 </html>
+
 
 
 
