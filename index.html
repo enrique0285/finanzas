@@ -768,8 +768,8 @@ function renderBreakdown(pos){
   document.getElementById('breakdown').innerHTML = rows || '<div class="empty-note">Sin datos todavía.</div>';
 }
 
-function periodEnds(){
-  const allDates = G().moves.filter(m=>m.fecha).map(m=>new Date(m.fecha));
+function periodEnds(filterFn){
+  const allDates = G().moves.filter(filterFn || (()=>true)).filter(m=>m.fecha).map(m=>new Date(m.fecha));
   if(!allDates.length) return [];
   const minDate = new Date(Math.min(...allDates));
   const today = new Date();
@@ -789,15 +789,16 @@ function closedYearsAllGroups(){
   for(let y=minY; y<=maxY; y++) years.push(y);
   return years;
 }
-function portfolioValueAtDate(dateEnd, isCurrent, year){
+function portfolioValueAtDate(dateEnd, isCurrent, year, filterFn){
+  filterFn = filterFn || (()=>true);
   const held = {};
-  G().moves.filter(m=>m.operacion==='Comp-Vent' && new Date(m.fecha) <= dateEnd).forEach(m=>{
+  G().moves.filter(filterFn).filter(m=>m.operacion==='Comp-Vent' && new Date(m.fecha) <= dateEnd).forEach(m=>{
     const key = m.titular+'|'+m.banco+'|'+m.valor;
     held[key] = (held[key]||0) + (+m.titulos||0);
   });
   const lastPrice = {};
   if(!isCurrent){
-    G().moves.filter(m=>m.operacion==='Comp-Vent' && new Date(m.fecha)<=dateEnd && +m.precio>0)
+    G().moves.filter(filterFn).filter(m=>m.operacion==='Comp-Vent' && new Date(m.fecha)<=dateEnd && +m.precio>0)
       .sort((a,b)=> new Date(a.fecha)-new Date(b.fecha))
       .forEach(m=>{ lastPrice[m.valor] = +m.precio; });
   }
@@ -1291,8 +1292,12 @@ document.getElementById('refreshBtn').onclick = async (e)=>{
 document.getElementById('generarInforme').onclick = ()=>{
   const scopes = ['Total', ...subgrupos()];
 
+  function scopeFilterFn(scope){
+    return scope==='Total' ? (()=>true) : (m=>groupOf(m.titular)===scope);
+  }
+
   function kpiDataFor(scope){
-    const filterFn = scope==='Total' ? (()=>true) : (m=>groupOf(m.titular)===scope);
+    const filterFn = scopeFilterFn(scope);
     const pos = positions(filterFn);
     let valoracion=0, coste=0, dividendos=0;
     pos.forEach(p=>{ const q = quoteEur(p.valor) || (p.coste/p.titulos); valoracion += p.titulos*q; coste += p.coste; dividendos += p.dividendos; });
@@ -1307,10 +1312,9 @@ document.getElementById('generarInforme').onclick = ()=>{
     return {scope, valoracion, resultado, rent, tir, dividendos, pctInv, efectivo, potEur, potPct, nPos:pos.length};
   }
 
-  const kpiBlocksHtml = scopes.map(scope=>{
+  function kpisHtmlFor(scope){
     const d = kpiDataFor(scope);
-    return `<h2>${scope==='Total' ? 'KPIs — Total' : 'KPIs — '+scope}</h2>
-    <div class="kpis">
+    return `<div class="kpis">
       <div class="kpi"><div class="l">Patrimonio</div><div class="v">${eur(d.valoracion)}</div><div class="s">${d.nPos} posiciones</div></div>
       <div class="kpi"><div class="l">Resultado</div><div class="v ${d.resultado>=0?'pos':'neg'}">${eur(d.resultado)}</div><div class="s">incl. dividendos</div></div>
       <div class="kpi"><div class="l">Rentabilidad simple</div><div class="v ${d.rent>=0?'pos':'neg'}">${pct(d.rent)}</div><div class="s">sobre coste invertido</div></div>
@@ -1320,79 +1324,104 @@ document.getElementById('generarInforme').onclick = ()=>{
       <div class="kpi"><div class="l">Potencial</div><div class="v ${d.potEur>=0?'pos':'neg'}">${eur(d.potEur)}</div><div class="s">hasta precio objetivo</div></div>
       <div class="kpi"><div class="l">Potencial %</div><div class="v ${d.potPct>=0?'pos':'neg'}">${pct(d.potPct)}</div><div class="s">sobre valoración actual</div></div>
     </div>`;
-  }).join('');
+  }
 
-  // ---- Posiciones vivas, agrupadas por vehículo (todo el grupo, sin filtros) ----
-  const fnAll = ()=>true;
-  const posAll = positionsByValor(fnAll);
-  let totalPos = 0;
-  const withVal = posAll.map(p=>{
-    const q = quoteEur(p.valor) || (p.coste/p.titulos);
-    const val = p.titulos*q; totalPos += val;
-    const s = sec(p.valor);
-    return {...p, q, val, vehiculo:(s&&s.vehiculo)||'Sin clasificar'};
-  });
-  const groups = {};
-  withVal.forEach(p=>{ (groups[p.vehiculo]=groups[p.vehiculo]||[]).push(p); });
-  const groupNames = Object.keys(groups).sort((a,b)=> groups[b].reduce((s,p)=>s+p.val,0) - groups[a].reduce((s,p)=>s+p.val,0));
-
-  let posRows = '';
-  groupNames.forEach(name=>{
-    const items = groups[name].sort((a,b)=>b.val-a.val);
-    const subtotal = items.reduce((s,p)=>s+p.val,0);
-    const subCoste = items.reduce((s,p)=>s+p.coste,0);
-    const subDiv = items.reduce((s,p)=>s+p.dividendos,0);
-    const subResultado = subtotal - subCoste + subDiv;
-    const subRent = subCoste ? subResultado/subCoste : NaN;
-    const subTir = valoresXirr(items.map(p=>p.valor), fnAll, subtotal);
-    posRows += `<tr class="grp">
-      <td>${name} · ${items.length}</td><td></td><td></td>
-      <td class="num">${eur(subtotal)}</td><td class="num">${pct(totalPos?subtotal/totalPos:0)}</td>
-      <td class="num">${eur(subDiv)}</td>
-      <td class="num ${subResultado>=0?'pos':'neg'}">${eur(subResultado)}</td>
-      <td class="num ${subRent>=0?'pos':'neg'}">${pct(subRent)}</td>
-      <td class="num ${isFinite(subTir)?(subTir>=0?'pos':'neg'):''}">${pct(subTir)}</td>
-      <td></td></tr>`;
-    items.forEach(p=>{
-      const resultado = p.val - p.coste + p.dividendos;
-      const rent = p.coste ? resultado/p.coste : 0;
-      const peso = totalPos ? p.val/totalPos : 0;
+  function posHtmlFor(scope){
+    const fn = scopeFilterFn(scope);
+    const posScope = positionsByValor(fn);
+    let totalPos = 0;
+    const withVal = posScope.map(p=>{
+      const q = quoteEur(p.valor) || (p.coste/p.titulos);
+      const val = p.titulos*q; totalPos += val;
       const s = sec(p.valor);
-      const potencial = (s && s.objetivo>0) ? (s.objetivo - s.quote)/s.quote : NaN;
-      const tir = positionXirr(p.valor, fnAll, p.titulos);
-      posRows += `<tr><td>${p.valor}</td><td>${p.titular}</td><td>${p.banco}</td>
-        <td class="num">${eur(p.val)}</td><td class="num">${pct(peso)}</td>
-        <td class="num">${eur(p.dividendos)}</td>
-        <td class="num ${resultado>=0?'pos':'neg'}">${eur(resultado)}</td>
-        <td class="num ${rent>=0?'pos':'neg'}">${pct(rent)}</td>
-        <td class="num ${isFinite(tir)?(tir>=0?'pos':'neg'):''}">${pct(tir)}</td>
-        <td class="num ${isFinite(potencial)?(potencial>=0?'pos':'neg'):''}">${pct(potencial)}</td></tr>`;
+      return {...p, q, val, vehiculo:(s&&s.vehiculo)||'Sin clasificar'};
     });
-  });
+    if(!withVal.length) return '<p class="s">Sin posiciones en este ámbito.</p>';
+    const groups = {};
+    withVal.forEach(p=>{ (groups[p.vehiculo]=groups[p.vehiculo]||[]).push(p); });
+    const groupNames = Object.keys(groups).sort((a,b)=> groups[b].reduce((s,p)=>s+p.val,0) - groups[a].reduce((s,p)=>s+p.val,0));
+    let rows = '';
+    groupNames.forEach(name=>{
+      const items = groups[name].sort((a,b)=>b.val-a.val);
+      const subtotal = items.reduce((s,p)=>s+p.val,0);
+      const subCoste = items.reduce((s,p)=>s+p.coste,0);
+      const subDiv = items.reduce((s,p)=>s+p.dividendos,0);
+      const subResultado = subtotal - subCoste + subDiv;
+      const subRent = subCoste ? subResultado/subCoste : NaN;
+      const subTir = valoresXirr(items.map(p=>p.valor), fn, subtotal);
+      rows += `<tr class="grp">
+        <td>${name} · ${items.length}</td><td></td><td></td>
+        <td class="num">${eur(subtotal)}</td><td class="num">${pct(totalPos?subtotal/totalPos:0)}</td>
+        <td class="num">${eur(subDiv)}</td>
+        <td class="num ${subResultado>=0?'pos':'neg'}">${eur(subResultado)}</td>
+        <td class="num ${subRent>=0?'pos':'neg'}">${pct(subRent)}</td>
+        <td class="num ${isFinite(subTir)?(subTir>=0?'pos':'neg'):''}">${pct(subTir)}</td>
+        <td></td></tr>`;
+      items.forEach(p=>{
+        const resultado = p.val - p.coste + p.dividendos;
+        const rent = p.coste ? resultado/p.coste : 0;
+        const peso = totalPos ? p.val/totalPos : 0;
+        const s = sec(p.valor);
+        const potencial = (s && s.objetivo>0) ? (s.objetivo - s.quote)/s.quote : NaN;
+        const tir = positionXirr(p.valor, fn, p.titulos);
+        rows += `<tr><td>${p.valor}</td><td>${p.titular}</td><td>${p.banco}</td>
+          <td class="num">${eur(p.val)}</td><td class="num">${pct(peso)}</td>
+          <td class="num">${eur(p.dividendos)}</td>
+          <td class="num ${resultado>=0?'pos':'neg'}">${eur(resultado)}</td>
+          <td class="num ${rent>=0?'pos':'neg'}">${pct(rent)}</td>
+          <td class="num ${isFinite(tir)?(tir>=0?'pos':'neg'):''}">${pct(tir)}</td>
+          <td class="num ${isFinite(potencial)?(potencial>=0?'pos':'neg'):''}">${pct(potencial)}</td></tr>`;
+      });
+    });
+    return `<table><thead><tr><th>Valor</th><th>Titular</th><th>Banco</th><th class="num">Valoración</th><th class="num">% cartera</th><th class="num">Dividendos</th><th class="num">Resultado</th><th class="num">Rentab.</th><th class="num">TIR</th><th class="num">Potencial</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
 
-  // ---- Distribución (titular y banco, con efectivo apilado) ----
-  function breakdownHtml(key){
+  function breakdownHtmlFor(key, scope){
+    const fn = scopeFilterFn(scope);
+    const posScope = positionsByValor(fn);
     const investedAgg = {};
-    withVal.forEach(p=>{ investedAgg[p[key]] = (investedAgg[p[key]]||0)+p.val; });
+    posScope.forEach(p=>{ const q = quoteEur(p.valor) || (p.coste/p.titulos); investedAgg[p[key]] = (investedAgg[p[key]]||0)+p.titulos*q; });
     const cashAgg = {};
-    G().cashBalances.forEach(c=>{ cashAgg[c[key]] = (cashAgg[c[key]]||0) + (+c.saldo||0); });
+    G().cashBalances.filter(c => scope==='Total' || groupOf(c.titular)===scope).forEach(c=>{ cashAgg[c[key]] = (cashAgg[c[key]]||0) + (+c.saldo||0); });
     const names = new Set([...Object.keys(investedAgg), ...Object.keys(cashAgg)]);
     const data = [...names].map(name=>{
       const inv = investedAgg[name]||0, cash = cashAgg[name]||0;
       return {name, inv, cash, total: inv+cash};
     }).sort((a,b)=>b.total-a.total);
+    if(!data.length) return '<p class="s">Sin datos.</p>';
     const max = Math.max(...data.map(d=>d.total), 1);
     return data.map(d=>`
       <div class="bar"><div class="bn">${d.name}</div>
         <div class="bt"><div class="bf" style="width:${(d.inv/max*100).toFixed(1)}%"></div><div class="bfc" style="width:${(d.cash/max*100).toFixed(1)}%"></div></div>
         <div class="bv">${eur(d.total)} · ${pct(d.total?d.cash/d.total:0)} efvo.</div>
-      </div>`).join('') || '<p class="s">Sin datos.</p>';
+      </div>`).join('');
   }
 
-  // ---- Evolución del valor invertido (todos los años) ----
-  const ends = periodEnds();
-  const evoSeries = ends.map(e=> ({period:e.label, value: portfolioValueAtDate(e.date, e.isCurrent, e.year)}));
-  const evoSvg = buildEvoSvg(evoSeries);
+  function evoHtmlFor(scope){
+    const fn = scopeFilterFn(scope);
+    const ends = periodEnds(fn);
+    const series = ends.map(e=> ({period:e.label, value: portfolioValueAtDate(e.date, e.isCurrent, e.year, fn)}));
+    return buildEvoSvg(series);
+  }
+
+  // Precalcula un bloque completo por cada ámbito (Total + subgrupos)
+  const blocks = scopes.map(scope=>`
+    <div class="scope-block" data-scope="${scope}" style="display:${scope==='Total'?'block':'none'}">
+      <h2>KPIs</h2>
+      ${kpisHtmlFor(scope)}
+      <h2>Posiciones vivas</h2>
+      ${posHtmlFor(scope)}
+      <h2>Distribución por titular</h2>
+      ${breakdownHtmlFor('titular', scope)}
+      <h2>Distribución por banco</h2>
+      ${breakdownHtmlFor('banco', scope)}
+      <h2>Evolución del valor invertido</h2>
+      <p class="s" style="font-family:monospace;font-size:11px;color:#847C68;">Solo acciones/fondos, no incluye efectivo. Años cerrados con cotización de cierre real cuando está cargada; si no, última operación conocida.</p>
+      ${evoHtmlFor(scope)}
+    </div>
+  `).join('');
+
+  const tabsHtml = scopes.map((s,i)=>`<button class="scope-tab ${i===0?'active':''}" data-scope="${s}">${s}</button>`).join('');
 
   const fecha = new Date().toLocaleDateString('es-ES',{day:'2-digit',month:'long',year:'numeric'});
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Informe de patrimonio — ${G().nombre}</title>
@@ -1401,8 +1430,11 @@ document.getElementById('generarInforme').onclick = ()=>{
     .wrap{max-width:900px;margin:0 auto;padding:48px 32px 64px;}
     .eyebrow{font-family:monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#A9812E;margin:0 0 8px;}
     h1{font-size:32px;margin:0 0 4px;}
-    .fecha{font-family:monospace;font-size:12.5px;color:#847C68;margin-bottom:20px;}
-    h2{font-size:18px;border-top:2px solid #A9812E;padding-top:14px;margin-top:40px;}
+    .fecha{font-family:monospace;font-size:12.5px;color:#847C68;margin-bottom:24px;}
+    .tabs{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
+    .scope-tab{font-family:monospace;font-size:12.5px;padding:9px 18px;border-radius:20px;border:1px solid #D8CFB8;background:#fff;color:#847C68;cursor:pointer;}
+    .scope-tab.active{background:#A9812E;color:#fff;border-color:#A9812E;font-weight:bold;}
+    h2{font-size:18px;border-top:2px solid #A9812E;padding-top:14px;margin-top:36px;}
     .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#E4DDC8;border:1px solid #E4DDC8;margin:14px 0 8px;}
     .kpi{background:#fff;padding:16px 14px;}
     .kpi .l{font-family:monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:#847C68;margin-bottom:7px;}
@@ -1424,25 +1456,20 @@ document.getElementById('generarInforme').onclick = ()=>{
     <p class="eyebrow">Informe de patrimonio</p>
     <h1>${G().nombre}</h1>
     <p class="fecha">Generado el ${fecha} · datos a esta fecha, no en vivo</p>
-
-    ${kpiBlocksHtml}
-
-    <h2>Posiciones vivas</h2>
-    <table><thead><tr><th>Valor</th><th>Titular</th><th>Banco</th><th class="num">Valoración</th><th class="num">% cartera</th><th class="num">Dividendos</th><th class="num">Resultado</th><th class="num">Rentab.</th><th class="num">TIR</th><th class="num">Potencial</th></tr></thead>
-    <tbody>${posRows}</tbody></table>
-
-    <h2>Distribución por titular</h2>
-    ${breakdownHtml('titular')}
-
-    <h2>Distribución por banco</h2>
-    ${breakdownHtml('banco')}
-
-    <h2>Evolución del valor invertido</h2>
-    <p class="s" style="font-family:monospace;font-size:11px;color:#847C68;">Solo acciones/fondos, no incluye efectivo. Años cerrados con cotización de cierre real cuando está cargada; si no, última operación conocida.</p>
-    ${evoSvg}
-
-    <footer>Documento generado automáticamente — foto fija de este momento, no se actualiza sola.</footer>
-  </div></body></html>`;
+    <div class="tabs">${tabsHtml}</div>
+    ${blocks}
+    <footer>Documento generado automáticamente — foto fija de este momento, no se actualiza sola. El selector de arriba solo cambia qué bloque ya calculado se muestra.</footer>
+  </div>
+  <script>
+    document.querySelectorAll('.scope-tab').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const scope = btn.dataset.scope;
+        document.querySelectorAll('.scope-tab').forEach(b=>b.classList.toggle('active', b===btn));
+        document.querySelectorAll('.scope-block').forEach(b=>{ b.style.display = (b.dataset.scope===scope) ? 'block' : 'none'; });
+      });
+    });
+  </script>
+  </body></html>`;
 
   const blob = new Blob([html], {type:'text/html'});
   const url = URL.createObjectURL(blob);
@@ -1543,6 +1570,7 @@ render();
 </script>
 </body>
 </html>
+
 
 
 
