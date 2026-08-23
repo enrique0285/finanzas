@@ -421,6 +421,7 @@ const STORAGE_KEY = 'patrimonio_app_v1';
 function defaultData(){
   return {
     eurUsd: 1.08,
+    eurUsdPrev: 1.08,
     workerUrl: '',
     lastUpdateTs: null,
     activeGrupo: 'grupo1',
@@ -461,9 +462,10 @@ function defaultData(){
         ],
         dismissed: [],
         datosVisible: true,
+        lastDataUpdate: null,
       },
-      grupo2: { nombre:'Grupo 2', titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], moves:[], cashBalances:[], dismissed:[], datosVisible:true },
-      grupo3: { nombre:'Grupo 3', titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], moves:[], cashBalances:[], dismissed:[], datosVisible:true },
+      grupo2: { nombre:'Grupo 2', titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], moves:[], cashBalances:[], dismissed:[], datosVisible:true, lastDataUpdate:null },
+      grupo3: { nombre:'Grupo 3', titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], moves:[], cashBalances:[], dismissed:[], datosVisible:true, lastDataUpdate:null },
     }
   };
 }
@@ -477,7 +479,6 @@ let kpiGroup = 'Total';
 let currentView = 'grupo'; // 'grupo' | 'valores'
 
 function G(){ return DB.grupos[DB.activeGrupo]; }
-const EURUSD_BASELINE = 1.08;
 
 function loadAll(){
   try{
@@ -501,7 +502,12 @@ function migrateIfNeeded(){
   saveAll();
   }
   if(DB.workerUrl === undefined) DB.workerUrl = '';
+  if(DB.eurUsdPrev === undefined) DB.eurUsdPrev = DB.eurUsd;
+  Object.values(DB.grupos || {}).forEach(g=>{
+    if(g.lastDataUpdate === undefined) g.lastDataUpdate = null;
+  });
 }
+function touchDataUpdate(){ G().lastDataUpdate = Date.now(); }
 function saveAll(){
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(DB)); }
   catch(e){ storageOk = false; showStorageBanner(); }
@@ -628,7 +634,14 @@ function render(){
   document.getElementById('groupToggle').style.display = currentView==='valores' ? 'none' : '';
   document.getElementById('openModal').style.display = currentView==='valores' ? 'none' : '';
   document.getElementById('generarInforme').style.display = currentView==='valores' ? 'none' : '';
-  document.getElementById('groupEyebrow').textContent = currentView==='valores' ? 'Patrimonio · Valores y cotizaciones (global)' : 'Patrimonio · ' + G().nombre;
+  if(currentView==='valores'){
+    document.getElementById('groupEyebrow').textContent = 'Patrimonio · Valores y cotizaciones (global)';
+  } else {
+    const lu = G().lastDataUpdate
+      ? 'movimientos actualizados: ' + new Date(G().lastDataUpdate).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})
+      : 'sin movimientos añadidos todavía';
+    document.getElementById('groupEyebrow').textContent = 'Patrimonio · ' + G().nombre + ' · ' + lu;
+  }
   renderTicker();
   if(currentView==='valores'){
     document.getElementById('workerUrlInput').value = DB.workerUrl || '';
@@ -682,7 +695,7 @@ function renderGroupTabs(){
     const nombre = prompt('Nombre del nuevo grupo de inversión:');
     if(!nombre || !nombre.trim()) return;
     const gid = 'grupo_' + Date.now();
-    DB.grupos[gid] = {nombre:nombre.trim(), titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], moves:[], cashBalances:[], dismissed:[], datosVisible:true};
+    DB.grupos[gid] = {nombre:nombre.trim(), titulares:[], bancos:['CaixaBank','Santander','Bankinter','Renta4'], moves:[], cashBalances:[], dismissed:[], datosVisible:true, lastDataUpdate:null};
     DB.activeGrupo = gid; currentView='grupo';
     saveAll(); render();
   };
@@ -694,11 +707,11 @@ function renderTicker(){
   const list = currentView==='valores' ? DB.securities : DB.securities.filter(s=>usados.has(s.nombre));
   const items = list.map(s=>{
     const sym = s.moneda==='USD' ? '$' : '€';
-    const diff = ((s.quote-s.baseline)/s.baseline*100);
+    const diff = s.baseline ? ((s.quote-s.baseline)/s.baseline*100) : 0;
     const cls = diff>=0?'up':'down', arrow = diff>=0?'▲':'▼';
     return `<div class="tick"><span class="sym">${s.nombre} <small>${s.ticker}</small></span><span>${sym}${fmtNum(s.quote,2)}</span><span class="${cls}">${arrow} ${fmtNum(Math.abs(diff),2)}%</span><span class="dot"></span></div>`;
   });
-  const fxDiff = ((DB.eurUsd-EURUSD_BASELINE)/EURUSD_BASELINE*100);
+  const fxDiff = DB.eurUsdPrev ? ((DB.eurUsd-DB.eurUsdPrev)/DB.eurUsdPrev*100) : 0;
   const fxCls = fxDiff>=0?'up':'down', fxArrow = fxDiff>=0?'▲':'▼';
   items.push(`<div class="tick fx"><span class="sym">EUR/USD</span><span>${fmtNum(DB.eurUsd,4)}</span><span class="${fxCls}">${fxArrow} ${fmtNum(Math.abs(fxDiff),2)}%</span><span class="dot"></span></div>`);
   const html = items.join('') || '<div class="tick"><span class="sym">Sin valores todavía</span></div>';
@@ -1075,6 +1088,7 @@ function renderPending(){
         G().moves.push({titular, banco, valor, operacion:'Dividendos', fecha, titulos:0, precio:0, importe: parseFloat(totalInput.value)||0});
       }
       G().dismissed.push(key);
+      touchDataUpdate();
       saveAll(); render();
     };
   });
@@ -1217,11 +1231,11 @@ function renderRaw(){
       input.addEventListener('change', ()=>{
         const f = input.dataset.f; let val = input.value;
         if(['titulos','precio','importe'].includes(f)) val = parseFloat(val)||0;
-        G().moves[i][f] = val; saveAll(); render();
+        G().moves[i][f] = val; touchDataUpdate(); saveAll(); render();
       });
     });
     const del = tr.querySelector('[data-action="del"]');
-    if(del) del.onclick = ()=>{ G().moves.splice(i,1); saveAll(); render(); };
+    if(del) del.onclick = ()=>{ G().moves.splice(i,1); touchDataUpdate(); saveAll(); render(); };
   });
 }
 document.getElementById('movFilterTitular').addEventListener('change', e=>{ movFilterTit = e.target.value; renderRaw(); });
@@ -1231,6 +1245,7 @@ document.getElementById('movFilterOp').addEventListener('change', e=>{ movFilter
 document.getElementById('addRowBtn').onclick = ()=>{
   if(!G().titulares.length || !G().bancos.length || !DB.securities.length){ alert('Añade primero titulares, bancos y al menos un valor.'); return; }
   G().moves.push({titular:G().titulares[0].nombre, banco:G().bancos[0], valor:DB.securities[0].nombre, operacion:'Comp-Vent', fecha:new Date().toISOString().slice(0,10), titulos:0, precio:0});
+  touchDataUpdate();
   saveAll(); render();
 };
 document.getElementById('toggleDatosBtn').onclick = ()=>{
@@ -1273,10 +1288,10 @@ document.getElementById('refreshBtn').onclick = async (e)=>{
     DB.securities.forEach(s=>{
       if(!s.ticker) return;
       const d = data[s.ticker];
-      if(d && typeof d.price === 'number') s.quote = d.price;
+      if(d && typeof d.price === 'number'){ s.baseline = s.quote; s.quote = d.price; }
       else fallos.push(s.nombre);
     });
-    if(data['EURUSD=X'] && typeof data['EURUSD=X'].price === 'number') DB.eurUsd = data['EURUSD=X'].price;
+    if(data['EURUSD=X'] && typeof data['EURUSD=X'].price === 'number'){ DB.eurUsdPrev = DB.eurUsd; DB.eurUsd = data['EURUSD=X'].price; }
     DB.lastUpdateTs = Date.now();
     saveAll();
     render();
@@ -1555,6 +1570,7 @@ document.getElementById('saveModal').onclick = ()=>{
     titulos: operacion==='Dividendos' ? 0 : titulos, precio,
     importe: operacion==='Dividendos' ? (titulos*precio || precio) : undefined,
   });
+  touchDataUpdate();
   saveAll();
   overlay.classList.remove('open');
   ['f_titulos','f_precio','ns_nombre','ns_ticker','ns_sector','ns_div','ns_objetivo'].forEach(id=>document.getElementById(id).value='');
@@ -1570,6 +1586,7 @@ render();
 </script>
 </body>
 </html>
+
 
 
 
