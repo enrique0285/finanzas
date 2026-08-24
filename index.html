@@ -230,7 +230,7 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th>Valor</th>
+          <th>Valor</th><th>Tipo</th>
           <th class="num">Invertido</th><th class="num">Recuperado en ventas</th>
           <th class="num">Dividendos</th><th class="num">Resultado</th><th class="num">Rentab.</th>
           <th class="num">TIR</th>
@@ -429,6 +429,11 @@ const eur = n => (n<0?'-':'') + '€' + Math.abs(n).toLocaleString('es-ES',{mini
 const pct = n => (isFinite(n) ? (n*100).toFixed(1).replace('.',',') + '%' : 'n/d');
 const fmtNum = (n, dec=2) => isFinite(n) ? n.toLocaleString('es-ES',{minimumFractionDigits:dec,maximumFractionDigits:dec,useGrouping:'always'}) : 'n/d';
 const FREQ_LABEL = {0:'Irregular',1:'Anual',2:'Semestral',4:'Trimestral'};
+const VEHICULO_ORDEN = ['Acciones €','Acciones $','Fondos R. Variable','Fondos R. Fija'];
+function ordenVehiculo(nombre){
+  const i = VEHICULO_ORDEN.indexOf(nombre);
+  return i === -1 ? VEHICULO_ORDEN.length : i;
+}
 const STORAGE_KEY = 'patrimonio_app_v1';
 
 // ---- Datos por defecto (grupo 1 = ejemplo ilustrativo) ----
@@ -674,7 +679,9 @@ function render(){
     const lu = G().lastDataUpdate
       ? 'movimientos actualizados: ' + new Date(G().lastDataUpdate).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})
       : 'sin movimientos añadidos todavía';
-    document.getElementById('groupEyebrow').textContent = 'Patrimonio · ' + G().nombre + ' · ' + lu;
+    const fechas = G().moves.filter(m=>m.fecha).map(m=>new Date(m.fecha));
+    const inicio = fechas.length ? ' · invirtiendo desde ' + new Date(Math.min(...fechas)).getFullYear() : '';
+    document.getElementById('groupEyebrow').textContent = 'Patrimonio · ' + G().nombre + inicio + ' · ' + lu;
   }
   renderTicker();
   if(currentView==='valores'){
@@ -777,6 +784,12 @@ function renderKpis(){
   const resultado = valoracion + dividendos + entradas - coste;
   const rentSimple = coste ? resultado/coste : 0;
   const tir = groupXirr(pos, filterFn);
+  let latente = 0;
+  pos.filter(p=>Math.abs(p.titulos)>0.001).forEach(p=>{
+    const q = quoteEur(p.valor) || (p.coste/p.titulos);
+    latente += p.titulos*q + p.dividendos + (p.entradas||0) - p.coste;
+  });
+  const realizado = resultado - latente;
   const efectivo = G().cashBalances.filter(c => kpiGroup==='Total' || groupOf(c.titular)===kpiGroup)
     .reduce((s,c)=> s+(+c.saldo||0), 0);
   const pctInvertido = (valoracion+efectivo) ? valoracion/(valoracion+efectivo) : NaN;
@@ -788,8 +801,8 @@ function renderKpis(){
   const potencialPct = valoracion ? potencialEur/valoracion : NaN;
   const nPosVivas = pos.filter(p=>Math.abs(p.titulos)>0.001).length;
   document.getElementById('kpis').innerHTML = `
-    <div class="kpi"><div class="label">Patrimonio${kpiGroup!=='Total'?' · '+kpiGroup:''}</div><div class="value">${eur(valoracion)}</div><div class="sub">${nPosVivas} posiciones vivas</div></div>
-    <div class="kpi"><div class="label">Resultado</div><div class="value ${resultado>=0?'pos':'neg'}">${eur(resultado)}</div><div class="sub">incl. dividendos</div></div>
+    <div class="kpi"><div class="label">Patrimonio${kpiGroup!=='Total'?' · '+kpiGroup:''}</div><div class="value">${eur(valoracion+efectivo)}</div><div class="sub">${eur(valoracion)} invertido + ${eur(efectivo)} efvo.</div></div>
+    <div class="kpi"><div class="label">Resultado</div><div class="value ${resultado>=0?'pos':'neg'}">${eur(resultado)}</div><div class="sub">latente: ${eur(latente)} · realizado: ${eur(realizado)}</div></div>
     <div class="kpi"><div class="label">Rentabilidad simple</div><div class="value ${rentSimple>=0?'pos':'neg'}">${pct(rentSimple)}</div><div class="sub">sobre coste invertido</div></div>
     <div class="kpi"><div class="label">TIR anualizada</div><div class="value ${tir>=0?'pos':'neg'}">${pct(tir)}</div><div class="sub">XIRR · n/d si &lt;1 año</div></div>
     <div class="kpi"><div class="label">Dividendos cobrados</div><div class="value">${eur(dividendos)}</div><div class="sub">histórico, en efectivo</div></div>
@@ -1036,10 +1049,7 @@ function renderTable(){
 
   const groups = {};
   withVal.forEach(p=>{ (groups[p.vehiculo] = groups[p.vehiculo] || []).push(p); });
-  const groupNames = Object.keys(groups).sort((a,b)=>{
-    const ta = groups[a].reduce((s,p)=>s+p.val,0), tb = groups[b].reduce((s,p)=>s+p.val,0);
-    return tb - ta;
-  });
+  const groupNames = Object.keys(groups).sort((a,b)=> ordenVehiculo(a) - ordenVehiculo(b));
   let rows = '';
   groupNames.forEach(name=>{
     const items = groups[name].sort((a,b)=> b.val - a.val);
@@ -1073,24 +1083,42 @@ function renderTable(){
 
 function renderClosedTable(){
   const fn = tableFilterFn();
-  const cerradas = positionsByValor(fn, 'vendidas');
+  const cerradas = positionsByValor(fn, 'vendidas').map(p=>{
+    const resultado = p.dividendos + p.entradas - p.coste;
+    const rent = p.coste ? resultado/p.coste : NaN;
+    const tir = positionXirr(p.valor, fn, 0);
+    const s = sec(p.valor);
+    return {...p, resultado, rent, tir, tipo:(s&&s.vehiculo)||'Sin clasificar'};
+  }).sort((a,b)=> b.resultado - a.resultado);
+
   document.getElementById('posCerradasCount').textContent = `${cerradas.length.toLocaleString('es-ES',{useGrouping:'always'})} valores vendidos del todo`;
-  const rows = cerradas
-    .map(p=>{
-      const resultado = p.dividendos + p.entradas - p.coste;
-      const rent = p.coste ? resultado/p.coste : NaN;
-      const tir = positionXirr(p.valor, fn, 0);
-      return {...p, resultado, rent, tir};
-    })
-    .sort((a,b)=> b.coste - a.coste)
-    .map(p=>`<tr><td class="name">${p.valor}</td>
+
+  const rows = cerradas.map(p=>`<tr><td class="name">${p.valor}</td><td><span class="tag">${p.tipo}</span></td>
       <td class="num">${eur(p.coste)}</td><td class="num">${eur(p.entradas)}</td>
       <td class="num">${eur(p.dividendos)}</td>
       <td class="num ${p.resultado>=0?'pos':'neg'}">${eur(p.resultado)}</td>
       <td class="num ${p.rent>=0?'pos':'neg'}">${pct(p.rent)}</td>
-      <td class="num ${isFinite(p.tir)?(p.tir>=0?'pos':'neg'):''}">${pct(p.tir)}</td></tr>`)
-    .join('');
-  document.getElementById('posCerradasBody').innerHTML = rows || '<tr><td colspan="7" class="empty-note">Sin posiciones vendidas del todo para este filtro.</td></tr>';
+      <td class="num ${isFinite(p.tir)?(p.tir>=0?'pos':'neg'):''}">${pct(p.tir)}</td></tr>`).join('');
+
+  let summaryRow = '';
+  if(cerradas.length){
+    const totCoste = cerradas.reduce((s,p)=>s+p.coste,0);
+    const totEntradas = cerradas.reduce((s,p)=>s+p.entradas,0);
+    const totDiv = cerradas.reduce((s,p)=>s+p.dividendos,0);
+    const totResultado = cerradas.reduce((s,p)=>s+p.resultado,0);
+    const totRent = totCoste ? totResultado/totCoste : NaN;
+    const totTir = valoresXirr(cerradas.map(p=>p.valor), fn, 0);
+    summaryRow = `<tr class="grp">
+      <td>Total vendidas · ${cerradas.length}</td><td></td>
+      <td class="num">${eur(totCoste)}</td><td class="num">${eur(totEntradas)}</td>
+      <td class="num">${eur(totDiv)}</td>
+      <td class="num ${totResultado>=0?'pos':'neg'}">${eur(totResultado)}</td>
+      <td class="num ${totRent>=0?'pos':'neg'}">${pct(totRent)}</td>
+      <td class="num ${isFinite(totTir)?(totTir>=0?'pos':'neg'):''}">${pct(totTir)}</td>
+    </tr>`;
+  }
+
+  document.getElementById('posCerradasBody').innerHTML = (summaryRow + rows) || '<tr><td colspan="8" class="empty-note">Sin posiciones vendidas del todo para este filtro.</td></tr>';
 }
 
 function pendingDividends(){
@@ -1446,19 +1474,25 @@ document.getElementById('generarInforme').onclick = ()=>{
     const resultado = valoracion + dividendos + entradas - coste;
     const rent = coste ? resultado/coste : 0;
     const tir = groupXirr(pos, filterFn);
+    let latente = 0;
+    pos.filter(p=>Math.abs(p.titulos)>0.001).forEach(p=>{
+      const q = quoteEur(p.valor) || (p.coste/p.titulos);
+      latente += p.titulos*q + p.dividendos + (p.entradas||0) - p.coste;
+    });
+    const realizado = resultado - latente;
     const efectivo = G().cashBalances.filter(c => scope==='Total' || groupOf(c.titular)===scope).reduce((s,c)=> s+(+c.saldo||0), 0);
     const pctInv = (valoracion+efectivo) ? valoracion/(valoracion+efectivo) : NaN;
     let potEur = 0;
     pos.forEach(p=>{ const s = sec(p.valor); if(s && s.objetivo>0){ potEur += toEurAmt(p.titulos*(s.objetivo - s.quote), s.moneda); } });
     const potPct = valoracion ? potEur/valoracion : NaN;
-    return {scope, valoracion, resultado, rent, tir, dividendos, pctInv, efectivo, potEur, potPct, nPos: pos.filter(p=>Math.abs(p.titulos)>0.001).length};
+    return {scope, valoracion, resultado, rent, tir, dividendos, pctInv, efectivo, potEur, potPct, latente, realizado, nPos: pos.filter(p=>Math.abs(p.titulos)>0.001).length};
   }
 
   function kpisHtmlFor(scope){
     const d = kpiDataFor(scope);
     return `<div class="kpis">
-      <div class="kpi"><div class="l">Patrimonio</div><div class="v">${eur(d.valoracion)}</div><div class="s">${d.nPos} posiciones vivas</div></div>
-      <div class="kpi"><div class="l">Resultado</div><div class="v ${d.resultado>=0?'pos':'neg'}">${eur(d.resultado)}</div><div class="s">incl. dividendos</div></div>
+      <div class="kpi"><div class="l">Patrimonio</div><div class="v">${eur(d.valoracion+d.efectivo)}</div><div class="s">${eur(d.valoracion)} invertido + ${eur(d.efectivo)} efvo.</div></div>
+      <div class="kpi"><div class="l">Resultado</div><div class="v ${d.resultado>=0?'pos':'neg'}">${eur(d.resultado)}</div><div class="s">latente: ${eur(d.latente)} · realizado: ${eur(d.realizado)}</div></div>
       <div class="kpi"><div class="l">Rentabilidad simple</div><div class="v ${d.rent>=0?'pos':'neg'}">${pct(d.rent)}</div><div class="s">sobre coste invertido</div></div>
       <div class="kpi"><div class="l">TIR anualizada</div><div class="v ${d.tir>=0?'pos':'neg'}">${pct(d.tir)}</div><div class="s">XIRR · n/d si &lt;1 año</div></div>
       <div class="kpi"><div class="l">Dividendos cobrados</div><div class="v">${eur(d.dividendos)}</div><div class="s">histórico, en efectivo</div></div>
@@ -1481,7 +1515,7 @@ document.getElementById('generarInforme').onclick = ()=>{
     if(!withVal.length) return '<p class="s">Sin posiciones en este ámbito.</p>';
     const groups = {};
     withVal.forEach(p=>{ (groups[p.vehiculo]=groups[p.vehiculo]||[]).push(p); });
-    const groupNames = Object.keys(groups).sort((a,b)=> groups[b].reduce((s,p)=>s+p.val,0) - groups[a].reduce((s,p)=>s+p.val,0));
+    const groupNames = Object.keys(groups).sort((a,b)=> ordenVehiculo(a) - ordenVehiculo(b));
     let rows = '';
     groupNames.forEach(name=>{
       const items = groups[name].sort((a,b)=>b.val-a.val);
@@ -1521,20 +1555,33 @@ document.getElementById('generarInforme').onclick = ()=>{
 
   function posCerradasHtmlFor(scope){
     const fn = scopeFilterFn(scope);
-    const cerradas = positionsByValor(fn, 'vendidas');
-    if(!cerradas.length) return '<p class="s">Sin posiciones vendidas del todo en este ámbito.</p>';
-    const rows = cerradas.map(p=>{
+    const cerradas = positionsByValor(fn, 'vendidas').map(p=>{
       const resultado = p.dividendos + p.entradas - p.coste;
       const rent = p.coste ? resultado/p.coste : NaN;
       const tir = positionXirr(p.valor, fn, 0);
-      return {...p, resultado, rent, tir};
-    }).sort((a,b)=> b.coste - a.coste).map(p=>`<tr><td>${p.valor}</td>
+      const s = sec(p.valor);
+      return {...p, resultado, rent, tir, tipo:(s&&s.vehiculo)||'Sin clasificar'};
+    }).sort((a,b)=> b.resultado - a.resultado);
+    if(!cerradas.length) return '<p class="s">Sin posiciones vendidas del todo en este ámbito.</p>';
+    const rows = cerradas.map(p=>`<tr><td>${p.valor}</td><td>${p.tipo}</td>
       <td class="num">${eur(p.coste)}</td><td class="num">${eur(p.entradas)}</td>
       <td class="num">${eur(p.dividendos)}</td>
       <td class="num ${p.resultado>=0?'pos':'neg'}">${eur(p.resultado)}</td>
       <td class="num ${p.rent>=0?'pos':'neg'}">${pct(p.rent)}</td>
       <td class="num ${isFinite(p.tir)?(p.tir>=0?'pos':'neg'):''}">${pct(p.tir)}</td></tr>`).join('');
-    return `<table><thead><tr><th>Valor</th><th class="num">Invertido</th><th class="num">Recuperado en ventas</th><th class="num">Dividendos</th><th class="num">Resultado</th><th class="num">Rentab.</th><th class="num">TIR</th></tr></thead><tbody>${rows}</tbody></table>`;
+    const totCoste = cerradas.reduce((s,p)=>s+p.coste,0);
+    const totEntradas = cerradas.reduce((s,p)=>s+p.entradas,0);
+    const totDiv = cerradas.reduce((s,p)=>s+p.dividendos,0);
+    const totResultado = cerradas.reduce((s,p)=>s+p.resultado,0);
+    const totRent = totCoste ? totResultado/totCoste : NaN;
+    const totTir = valoresXirr(cerradas.map(p=>p.valor), fn, 0);
+    const summaryRow = `<tr class="grp"><td>Total vendidas · ${cerradas.length}</td><td></td>
+      <td class="num">${eur(totCoste)}</td><td class="num">${eur(totEntradas)}</td>
+      <td class="num">${eur(totDiv)}</td>
+      <td class="num ${totResultado>=0?'pos':'neg'}">${eur(totResultado)}</td>
+      <td class="num ${totRent>=0?'pos':'neg'}">${pct(totRent)}</td>
+      <td class="num ${isFinite(totTir)?(totTir>=0?'pos':'neg'):''}">${pct(totTir)}</td></tr>`;
+    return `<table><thead><tr><th>Valor</th><th>Tipo</th><th class="num">Invertido</th><th class="num">Recuperado en ventas</th><th class="num">Dividendos</th><th class="num">Resultado</th><th class="num">Rentab.</th><th class="num">TIR</th></tr></thead><tbody>${summaryRow}${rows}</tbody></table>`;
   }
 
   function breakdownHtmlFor(key, scope){
