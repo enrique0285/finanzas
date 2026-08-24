@@ -404,9 +404,9 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
 </div>
 
 <script>
-const eur = n => (n<0?'-':'') + '€' + Math.abs(n).toLocaleString('es-ES',{minimumFractionDigits:0,maximumFractionDigits:0});
+const eur = n => (n<0?'-':'') + '€' + Math.abs(n).toLocaleString('es-ES',{minimumFractionDigits:0,maximumFractionDigits:0,useGrouping:'always'});
 const pct = n => (isFinite(n) ? (n*100).toFixed(1).replace('.',',') + '%' : 'n/d');
-const fmtNum = (n, dec=2) => isFinite(n) ? n.toLocaleString('es-ES',{minimumFractionDigits:dec,maximumFractionDigits:dec}) : 'n/d';
+const fmtNum = (n, dec=2) => isFinite(n) ? n.toLocaleString('es-ES',{minimumFractionDigits:dec,maximumFractionDigits:dec,useGrouping:'always'}) : 'n/d';
 const FREQ_LABEL = {0:'Irregular',1:'Anual',2:'Semestral',4:'Trimestral'};
 const STORAGE_KEY = 'patrimonio_app_v1';
 
@@ -831,7 +831,7 @@ function portfolioValueAtDate(dateEnd, isCurrent, year, filterFn){
 }
 let evoRange = '10'; // '10' | 'all'
 function fmtAxis(n){
-  if(n>=1000) return Math.round(n/1000)+'k €';
+  if(n>=1000) return Math.round(n/1000).toLocaleString('es-ES',{useGrouping:'always'}) + 'k €';
   return eur(n);
 }
 function buildEvoSvg(series){
@@ -972,7 +972,7 @@ function renderTable(){
     const s = sec(p.valor);
     return {...p, q, val, vehiculo: (s && s.vehiculo) || 'Sin clasificar'};
   });
-  document.getElementById('posCount').textContent = `${withVal.length} posiciones`;
+  document.getElementById('posCount').textContent = `${withVal.length.toLocaleString('es-ES',{useGrouping:'always'})} posiciones`;
 
   const rowHtml = (p)=>{
     const resultado = p.val - p.coste + p.dividendos;
@@ -982,7 +982,7 @@ function renderTable(){
     const potencial = (s && s.objetivo>0) ? (s.objetivo - s.quote)/s.quote : NaN;
     const tir = positionXirr(p.valor, fn, p.titulos);
     return `<tr><td class="name">${p.valor}</td>
-      <td class="num">${p.titulos.toLocaleString('es-ES')}</td><td class="num">${s&&s.moneda==='USD'?'$':'€'}${fmtNum(s?s.quote:p.q,3)}</td>
+      <td class="num">${p.titulos.toLocaleString('es-ES',{useGrouping:'always'})}</td><td class="num">${s&&s.moneda==='USD'?'$':'€'}${fmtNum(s?s.quote:p.q,3)}</td>
       <td class="num">${eur(p.val)}</td><td class="num">${pct(peso)}</td>
       <td class="num">${eur(p.dividendos)}</td>
       <td class="num ${resultado>=0?'pos':'neg'}">${eur(resultado)}</td>
@@ -1063,7 +1063,7 @@ function renderPending(){
     const nAcciones = p.cotizacion ? Math.round(total/p.cotizacion) : 0;
     const eurNote = p.moneda==='USD' ? `<div class="fxnote">≈ ${eur(toEurAmt(total, 'USD'))} al cambio actual</div>` : '';
     return `<div class="pending" data-key="${p.key}">
-      <div class="pending-head"><b>${p.valor}</b><span>${p.titular} · ${p.banco} · ${p.titulos.toLocaleString('es-ES')} títulos · pago ${p.freqLabel.toLowerCase()}</span></div>
+      <div class="pending-head"><b>${p.valor}</b><span>${p.titular} · ${p.banco} · ${p.titulos.toLocaleString('es-ES',{useGrouping:'always'})} títulos · pago ${p.freqLabel.toLowerCase()}</span></div>
       <div class="pending-controls">
         <label>Fecha<input type="date" value="${p.fecha}" data-field="fecha"></label>
         <label>${sym} / título<input type="number" step="any" value="${p.perShare}" data-field="pershare"></label>
@@ -1270,7 +1270,7 @@ function renderRaw(){
     (movFilterOp==='Todos' || m.operacion===movFilterOp)
   );
   const sorted = filtered.sort((a,b)=> new Date(b.fecha||0) - new Date(a.fecha||0));
-  document.getElementById('rawCount').textContent = `${sorted.length} de ${all.length} movimientos mostrados — editable directamente, corrige cualquier error aquí mismo.`;
+  document.getElementById('rawCount').textContent = `${sorted.length.toLocaleString('es-ES',{useGrouping:'always'})} de ${all.length.toLocaleString('es-ES',{useGrouping:'always'})} movimientos mostrados — editable directamente, corrige cualquier error aquí mismo.`;
   document.getElementById('rawBody').innerHTML = sorted.map(m=>{
     const i = m._i;
     const importe = m.operacion==='Dividendos' ? (m.importe||0) : ((+m.titulos||0)*(+m.precio||0));
@@ -1647,6 +1647,7 @@ render();
 </script>
 </body>
 </html>
+
 
 
 
