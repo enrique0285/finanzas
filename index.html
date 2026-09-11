@@ -315,7 +315,9 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
         <div class="section-title">Dividendos por revisar</div>
         <div class="section-sub">Estimación, no un calendario real de dividendos: cuenta "cada X meses desde el último que registraste". Si llevas varios periodos sin meter dividendos de un valor, verás una tarjeta por cada uno que falte. Revisa importe y fecha antes de confirmar.</div>
       </div>
+      <select class="filter" id="pendingFilterValor"></select>
     </div>
+    <div class="section-sub" id="pendingCount" style="margin-bottom:14px;"></div>
     <div id="pendingWrap"></div>
   </section>
 
@@ -727,7 +729,7 @@ function renderGroupTabs(){
         if(nuevo && nuevo.trim()){ DB.grupos[gid].nombre = nuevo.trim(); saveAll(); }
       } else {
         DB.activeGrupo = gid; currentView='grupo'; filterTit='Todos'; filterBanco='Todos'; kpiGroup='Total'; mode='titular';
-        movFilterTit='Todos'; movFilterBanco='Todos'; movFilterValor='Todos'; movFilterOp='Todos';
+        movFilterTit='Todos'; movFilterBanco='Todos'; movFilterValor='Todos'; movFilterOp='Todos'; pendingFilterValor='Todos';
         saveAll();
       }
       render();
@@ -1147,10 +1149,22 @@ function pendingDividends(){
   });
   return out;
 }
+let pendingFilterValor = 'Todos';
 function renderPending(){
-  const list = pendingDividends();
+  const all = pendingDividends();
+  document.getElementById('pendingSection').style.display = all.length ? '' : 'none';
+
+  const selV = document.getElementById('pendingFilterValor');
+  const valoresConPendientes = [...new Set(all.map(p=>p.valor))].sort();
+  if(!['Todos',...valoresConPendientes].includes(pendingFilterValor)) pendingFilterValor = 'Todos';
+  selV.innerHTML = ['Todos', ...valoresConPendientes].map(v=>`<option value="${v}" ${v===pendingFilterValor?'selected':''}>${v==='Todos'?'Todos los valores':v}</option>`).join('');
+
+  const list = (pendingFilterValor==='Todos' ? all : all.filter(p=>p.valor===pendingFilterValor))
+    .sort((a,b)=> a.valor.localeCompare(b.valor) || a.fecha.localeCompare(b.fecha));
+
+  document.getElementById('pendingCount').textContent = `${list.length.toLocaleString('es-ES',{useGrouping:'always'})} de ${all.length.toLocaleString('es-ES',{useGrouping:'always'})} tarjetas mostradas`;
+
   const wrap = document.getElementById('pendingWrap');
-  document.getElementById('pendingSection').style.display = list.length ? '' : 'none';
   wrap.innerHTML = list.map(p=>{
     const sym = p.moneda==='USD' ? '$' : '€';
     const total = (parseFloat(p.perShare)*p.titulos).toFixed(2);
@@ -1397,6 +1411,7 @@ document.getElementById('movFilterTitular').addEventListener('change', e=>{ movF
 document.getElementById('movFilterBanco').addEventListener('change', e=>{ movFilterBanco = e.target.value; renderRaw(); });
 document.getElementById('movFilterValor').addEventListener('change', e=>{ movFilterValor = e.target.value; renderRaw(); });
 document.getElementById('movFilterOp').addEventListener('change', e=>{ movFilterOp = e.target.value; renderRaw(); });
+document.getElementById('pendingFilterValor').addEventListener('change', e=>{ pendingFilterValor = e.target.value; renderPending(); });
 document.getElementById('addRowBtn').onclick = ()=>{
   if(!G().titulares.length || !G().bancos.length || !DB.securities.length){ alert('Añade primero titulares, bancos y al menos un valor.'); return; }
   G().moves.push({titular:G().titulares[0].nombre, banco:G().bancos[0], valor:DB.securities[0].nombre, operacion:'Comp-Vent', fecha:new Date().toISOString().slice(0,10), titulos:0, precio:0});
