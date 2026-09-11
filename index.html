@@ -106,11 +106,11 @@ tr.grp td{background:var(--panel-2);font-family:'IBM Plex Mono',monospace;font-s
 .composicion-col{display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
 .composicion-sep{width:1px;background:var(--line);align-self:stretch;}
 .composicion-tipos-title{font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:10px;width:100%;}
-.tipo-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line);font-family:'IBM Plex Mono',monospace;font-size:12px;}
+.tipo-row{display:grid;grid-template-columns:150px 1fr;align-items:baseline;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line);font-family:'IBM Plex Mono',monospace;font-size:12px;}
 .tipo-row:last-child{border-bottom:none;}
-.tipo-row .tn{display:flex;align-items:center;gap:7px;font-weight:600;color:var(--text);font-size:12.5px;}
+.tipo-row .tn{display:flex;align-items:center;gap:7px;font-weight:600;color:var(--text);font-size:12.5px;flex-wrap:wrap;}
 .tipo-row .tn .dot{width:9px;height:9px;border-radius:2px;flex-shrink:0;}
-.tipo-row .td{color:var(--text-dim);text-align:right;white-space:nowrap;}
+.tipo-row .td{color:var(--text-dim);text-align:left;}
 .composicion-legend-item{display:flex;align-items:center;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;margin-bottom:10px;}
 .composicion-legend-item .dot{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
 .composicion-legend-item b{color:var(--text);font-weight:600;}
@@ -1091,8 +1091,8 @@ function renderComposicion(){
     const b = byTipo[t];
     const vivo = b.valoracion > 0.01;
     return `<div class="tipo-row">
-      <div class="tn"><span class="dot" style="background:${COLOR_MAP[t]}"></span>${t}${vivo?'':' <span style="color:var(--text-dim);font-weight:400;">(sin posición actual)</span>'}</div>
-      <div class="td">${eur(b.resultado)} · lat. ${eur(b.latente)} / real. ${eur(b.realizado)} · TIR ${pct(b.tir)}</div>
+      <div class="tn"><span class="dot" style="background:${COLOR_MAP[t]}"></span>${t}</div>
+      <div class="td">${vivo?'':'<span style="font-style:italic;">sin posición actual · </span>'}${eur(b.resultado)} · lat. ${eur(b.latente)} / real. ${eur(b.realizado)} · TIR ${pct(b.tir)}</div>
     </div>`;
   }).join('') : '<div class="empty-note" style="border:none;padding:0;">Sin historial todavía.</div>';
 
@@ -2121,6 +2121,7 @@ render();
 </script>
 </body>
 </html>
+
 
 
 
