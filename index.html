@@ -433,7 +433,7 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
       <div class="field-row">
         <div class="field"><label>Mercado</label><select id="ns_mercado"><option>Europa</option><option>EEUU</option><option>Otro</option></select></div>
         <div class="field"><label>Vehículo</label>
-          <select id="ns_vehiculo"><option>Acciones €</option><option>Acciones $</option><option>Fondos R. Fija</option><option>Fondos R. Variable</option></select>
+          <select id="ns_vehiculo"><option>Acciones €</option><option>Acciones $</option><option>Fondos R. Fija</option><option>Fondos R. Variable</option><option>Fondos Capital Riesgo</option></select>
         </div>
       </div>
       <div class="field-row">
@@ -469,7 +469,7 @@ const eur = n => (n<0?'-':'') + '€' + Math.abs(n).toLocaleString('es-ES',{mini
 const pct = n => (isFinite(n) ? (n*100).toFixed(1).replace('.',',') + '%' : 'n/d');
 const fmtNum = (n, dec=2) => isFinite(n) ? n.toLocaleString('es-ES',{minimumFractionDigits:dec,maximumFractionDigits:dec,useGrouping:'always'}) : 'n/d';
 const FREQ_LABEL = {0:'Irregular',1:'Anual',2:'Semestral',4:'Trimestral'};
-const VEHICULO_ORDEN = ['Acciones €','Acciones $','Fondos R. Variable','Fondos R. Fija'];
+const VEHICULO_ORDEN = ['Acciones €','Acciones $','Fondos R. Variable','Fondos R. Fija','Fondos Capital Riesgo'];
 function ordenVehiculo(nombre){
   const i = VEHICULO_ORDEN.indexOf(nombre);
   return i === -1 ? VEHICULO_ORDEN.length : i;
@@ -564,6 +564,11 @@ function migrateIfNeeded(){
   if(DB.eurUsdPrev === undefined) DB.eurUsdPrev = DB.eurUsd;
   Object.values(DB.grupos || {}).forEach(g=>{
     if(g.lastDataUpdate === undefined) g.lastDataUpdate = null;
+  });
+  DB.securities.forEach(s=>{
+    if(s.vehiculo !== 'Fondos Capital Riesgo' && /capital\s*riesgo/i.test(s.nombre)){
+      s.vehiculo = 'Fondos Capital Riesgo';
+    }
   });
 }
 function touchDataUpdate(){ G().lastDataUpdate = Date.now(); }
@@ -993,7 +998,7 @@ function renderKpis(){
 function renderComposicion(){
   const filterFn = kpiGroup==='Total' ? (()=>true) : (m => groupOf(m.titular)===kpiGroup);
   const pos = positions(filterFn).filter(p=>Math.abs(p.titulos)>0.001);
-  let rv=0, rf=0, otros=0;
+  let rv=0, rf=0, capitalRiesgo=0, otros=0;
   pos.forEach(p=>{
     const q = quoteEur(p.valor) || (p.coste/p.titulos);
     const val = p.titulos*q;
@@ -1001,14 +1006,16 @@ function renderComposicion(){
     const veh = (s && s.vehiculo) || '';
     if(veh.startsWith('Acciones') || veh==='Fondos R. Variable') rv += val;
     else if(veh==='Fondos R. Fija') rf += val;
+    else if(veh==='Fondos Capital Riesgo') capitalRiesgo += val;
     else otros += val;
   });
   const efectivo = G().cashBalances.filter(c => kpiGroup==='Total' || groupOf(c.titular)===kpiGroup)
     .reduce((s,c)=> s+(+c.saldo||0), 0);
-  const total = rv+rf+otros+efectivo;
+  const total = rv+rf+capitalRiesgo+otros+efectivo;
   const segmentos = [
     {label:'Renta variable', val:rv, color:'#A9812E'},
     {label:'Renta fija', val:rf, color:'#5B7A9E'},
+    {label:'Capital riesgo', val:capitalRiesgo, color:'#8B6BA8'},
     {label:'Efectivo', val:efectivo, color:'#3F6B3B'},
     {label:'Otros', val:otros, color:'#8A8368'},
   ].filter(s=>s.val>0.01);
@@ -1483,7 +1490,7 @@ function renderSecurities(){
       <td><input data-f="ticker" value="${s.ticker}"></td>
       <td><select data-f="moneda"><option value="EUR" ${s.moneda==='EUR'?'selected':''}>EUR</option><option value="USD" ${s.moneda==='USD'?'selected':''}>USD</option></select></td>
       <td><select data-f="mercado"><option ${s.mercado==='Europa'?'selected':''}>Europa</option><option ${s.mercado==='EEUU'?'selected':''}>EEUU</option><option ${s.mercado==='Otro'?'selected':''}>Otro</option></select></td>
-      <td><select data-f="vehiculo">${['Acciones €','Acciones $','Fondos R. Fija','Fondos R. Variable'].map(v=>`<option ${v===s.vehiculo?'selected':''}>${v}</option>`).join('')}</select></td>
+      <td><select data-f="vehiculo">${['Acciones €','Acciones $','Fondos R. Fija','Fondos R. Variable','Fondos Capital Riesgo'].map(v=>`<option ${v===s.vehiculo?'selected':''}>${v}</option>`).join('')}</select></td>
       <td><input data-f="sector" value="${s.sector}"></td>
       <td class="num"><input type="number" step="any" data-f="quote" value="${s.quote}"></td>
       <td class="num"><input type="number" step="any" data-f="div" value="${s.div}"></td>
@@ -2029,6 +2036,7 @@ render();
 </script>
 </body>
 </html>
+
 
 
 
