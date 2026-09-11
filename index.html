@@ -101,6 +101,13 @@ tr.group-row td:first-child{font-family:'Inter',sans-serif;text-transform:upperc
 tr.group-row .group-count{color:var(--text-dim);font-family:'IBM Plex Mono',monospace;text-transform:none;letter-spacing:0;}
 tr.group-row:hover td{background:var(--panel-2);}
 tr.grp td{background:var(--panel-2);font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);padding:8px 12px;border-top:2px solid var(--line);border-bottom:1px solid var(--line);}
+
+.composicion-wrap{display:flex;align-items:center;gap:24px;margin:20px 32px 0;padding:18px 20px;border:1px solid var(--line);background:var(--panel);flex-wrap:wrap;}
+.composicion-legend-item{display:flex;align-items:center;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;margin-bottom:8px;}
+.composicion-legend-item .dot{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
+.composicion-legend-item b{color:var(--text);font-weight:600;}
+.composicion-legend-item span.pct{color:var(--text-dim);margin-left:4px;}
+.alerta-concentracion{display:flex;align-items:flex-start;gap:10px;background:rgba(166,63,58,.08);border:1px solid rgba(166,63,58,.35);color:var(--burgundy);padding:12px 16px;border-radius:2px;margin-bottom:16px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:1.6;}
 .empty-note{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-dim);padding:13px 14px;border-top:1px dashed var(--line);}
 
 .et input, .et select{background:var(--panel-2); border:1px solid transparent; color:var(--text); font-family:'IBM Plex Mono',monospace; font-size:12.5px; padding:6px 7px; border-radius:2px; width:100%;}
@@ -194,6 +201,11 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
   <div id="grupoView">
   <div class="kpis" id="kpis"></div>
 
+  <div class="composicion-wrap">
+    <div id="composicionChart"></div>
+    <div id="composicionLegend"></div>
+  </div>
+
   <section>
     <div class="section-head">
       <div>
@@ -205,6 +217,7 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
         <select class="filter" id="filterBanco"></select>
       </div>
     </div>
+    <div id="alertaConcentracion"></div>
     <div class="table-wrap">
       <table>
         <thead><tr>
@@ -371,6 +384,31 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
     <div class="table-wrap" id="yearCloseWrap"></div>
   </section>
   </div><!-- /valoresView -->
+
+  <div id="fiscalView" style="display:none;">
+  <section style="padding-top:8px;">
+    <div class="section-head">
+      <div>
+        <div class="section-title">Simulador fiscal de venta</div>
+        <div class="section-sub">Estimación de la ganancia/pérdida (método FIFO, el que usa Hacienda) y del IRPF aproximado si vendieras hoy. Tramos del ahorro 2026: 19% hasta 6.000€ · 21% hasta 50.000€ · 23% hasta 200.000€ · 27% hasta 300.000€ · 30% en adelante — aplicados solo sobre esta ganancia, como si fuera tu única renta del ahorro del año. Para una cifra exacta, consulta con un asesor fiscal: tu situación real puede tener otras ganancias, pérdidas o rentas que cambien el tramo.</div>
+      </div>
+      <select class="filter" id="fiscalFilterTitular"></select>
+    </div>
+    <div class="table-wrap" style="margin-bottom:24px;">
+      <table>
+        <thead><tr>
+          <th></th><th>Valor</th><th>Banco</th>
+          <th class="num">Títulos en cartera</th><th class="num">Títulos a vender</th>
+          <th class="num">Cotización</th><th class="num">Coste FIFO</th>
+          <th class="num">Ganancia/Pérdida</th>
+        </tr></thead>
+        <tbody id="fiscalBody"></tbody>
+      </table>
+      <div class="empty-note">Por defecto no hay nada seleccionado — marca las posiciones que quieras simular vender.</div>
+    </div>
+    <div class="kpis" id="fiscalKpis"></div>
+  </section>
+  </div><!-- /fiscalView -->
 
   <footer>
     Los datos se guardan en el navegador (localStorage) de este dispositivo — no viajan a ningún servidor. Haz copia de seguridad (botón de arriba) de vez en cuando: si borras datos de navegación o cambias de navegador, se pierde lo que no esté respaldado en un archivo.
@@ -605,6 +643,134 @@ function positionsByValor(filterFn, estado){
   if(estado==='vendidas') return all.filter(p => Math.abs(p.titulos) <= 0.001 && (p.coste>0.001 || p.entradas>0.001));
   return all.filter(p => Math.abs(p.titulos) > 0.001);
 }
+const IRPF_TRAMOS_2026 = [[6000,0.19],[50000,0.21],[200000,0.23],[300000,0.27],[Infinity,0.30]];
+function calcularIRPF(gananciaNeta){
+  if(!(gananciaNeta > 0)) return 0;
+  let restante = gananciaNeta, impuesto = 0, anterior = 0;
+  for(const [limite, tipo] of IRPF_TRAMOS_2026){
+    const ancho = limite - anterior;
+    const enTramo = Math.min(restante, ancho);
+    if(enTramo <= 0) break;
+    impuesto += enTramo * tipo;
+    restante -= enTramo;
+    anterior = limite;
+    if(restante <= 0.0001) break;
+  }
+  return impuesto;
+}
+function fifoLotsRestantes(titular, banco, valor){
+  const moves = G().moves.filter(m=>m.titular===titular && m.banco===banco && m.valor===valor && m.operacion==='Comp-Vent')
+    .slice().sort((a,b)=> new Date(a.fecha) - new Date(b.fecha));
+  let lots = [];
+  moves.forEach(m=>{
+    let t = +m.titulos||0, precio = +m.precio||0;
+    if(t >= 0){
+      lots.push({fecha:m.fecha, titulos:t, precio});
+    } else {
+      let vender = -t;
+      while(vender > 0.0001 && lots.length){
+        const lot = lots[0];
+        const consumir = Math.min(lot.titulos, vender);
+        lot.titulos -= consumir;
+        vender -= consumir;
+        if(lot.titulos <= 0.0001) lots.shift();
+      }
+    }
+  });
+  return lots.filter(l=>l.titulos>0.0001);
+}
+function fifoCoste(lots, cantidad){
+  let restante = cantidad, coste = 0;
+  for(const lot of lots){
+    if(restante <= 0.0001) break;
+    const usar = Math.min(lot.titulos, restante);
+    coste += usar * lot.precio;
+    restante -= usar;
+  }
+  return coste;
+}
+function symMoneda(moneda){ return moneda==='USD' ? '$' : '€'; }
+
+let fiscalFilterTit = null;
+let fiscalVentas = {};
+function renderFiscal(){
+  const selT = document.getElementById('fiscalFilterTitular');
+  const titulares = G().titulares.map(t=>t.nombre);
+  if(!fiscalFilterTit || !titulares.includes(fiscalFilterTit)) fiscalFilterTit = titulares[0] || null;
+  selT.innerHTML = titulares.map(t=>`<option value="${t}" ${t===fiscalFilterTit?'selected':''}>${t}</option>`).join('');
+
+  const body = document.getElementById('fiscalBody');
+  if(!fiscalFilterTit){
+    body.innerHTML = '<tr><td colspan="8" class="empty-note">Este grupo no tiene titulares todavía.</td></tr>';
+    document.getElementById('fiscalKpis').innerHTML = '';
+    return;
+  }
+  const pos = positions(m=>m.titular===fiscalFilterTit, 'vivas').sort((a,b)=> a.valor.localeCompare(b.valor));
+  if(!pos.length){
+    body.innerHTML = '<tr><td colspan="8" class="empty-note">Sin posiciones vivas para este titular.</td></tr>';
+    document.getElementById('fiscalKpis').innerHTML = '';
+    return;
+  }
+
+  let totalBruto=0, totalGanancia=0, nSeleccionadas=0;
+  const rows = pos.map(p=>{
+    const key = p.titular+'|'+p.banco+'|'+p.valor;
+    const s = sec(p.valor);
+    const moneda = s ? s.moneda : 'EUR';
+    const quoteNative = s ? s.quote : 0;
+    const lots = fifoLotsRestantes(p.titular, p.banco, p.valor);
+    const vender = Math.min(fiscalVentas[key]||0, p.titulos);
+    const costeFifoNative = fifoCoste(lots, vender);
+    const costeFifo = toEurAmt(costeFifoNative, moneda);
+    const brutoVenta = toEurAmt(vender*quoteNative, moneda);
+    const ganancia = brutoVenta - costeFifo;
+    if(vender > 0.0001){ totalBruto += brutoVenta; totalGanancia += ganancia; nSeleccionadas++; }
+    return `<tr>
+      <td><input type="checkbox" data-key="${key}" ${vender>0?'checked':''}></td>
+      <td class="name">${p.valor}</td><td><span class="tag">${p.banco}</span></td>
+      <td class="num">${p.titulos.toLocaleString('es-ES',{useGrouping:'always'})}</td>
+      <td class="num"><input type="number" step="any" min="0" max="${p.titulos}" data-key-vender="${key}" data-max="${p.titulos}" value="${vender||0}" style="width:90px;"></td>
+      <td class="num">${symMoneda(moneda)}${fmtNum(quoteNative,3)}</td>
+      <td class="num">${eur(costeFifo)}</td>
+      <td class="num ${ganancia>=0?'pos':'neg'}">${eur(ganancia)}</td>
+    </tr>`;
+  }).join('');
+  body.innerHTML = rows;
+
+  body.querySelectorAll('[data-key-vender]').forEach(input=>{
+    input.addEventListener('change', ()=>{
+      const key = input.dataset.key;
+      const max = parseFloat(input.dataset.max)||0;
+      let v = Math.max(0, Math.min(parseFloat(input.value)||0, max));
+      fiscalVentas[key] = v;
+      renderFiscal();
+    });
+  });
+  body.querySelectorAll('input[type="checkbox"][data-key]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const key = cb.dataset.key;
+      const maxInput = cb.closest('tr').querySelector('[data-key-vender]');
+      const max = parseFloat(maxInput.dataset.max)||0;
+      fiscalVentas[key] = cb.checked ? max : 0;
+      renderFiscal();
+    });
+  });
+
+  const impuesto = calcularIRPF(totalGanancia);
+  const neto = totalBruto - impuesto;
+  const notaPerdida = (nSeleccionadas>0 && totalGanancia<0)
+    ? '<div class="sub">pérdida neta: no se paga IRPF; podría compensarse en años siguientes</div>' : '';
+  document.getElementById('fiscalKpis').innerHTML = `
+    <div class="kpi"><div class="label">Venta bruta simulada</div><div class="value">${eur(totalBruto)}</div><div class="sub">${nSeleccionadas} posiciones seleccionadas</div></div>
+    <div class="kpi"><div class="label">Ganancia/Pérdida (FIFO)</div><div class="value ${totalGanancia>=0?'pos':'neg'}">${eur(totalGanancia)}</div><div class="sub">antes de impuestos</div></div>
+    <div class="kpi"><div class="label">IRPF estimado</div><div class="value ${impuesto>0?'neg':''}">${eur(impuesto)}</div>${notaPerdida || '<div class="sub">tramos del ahorro 2026</div>'}</div>
+    <div class="kpi"><div class="label">Neto a recibir</div><div class="value pos">${eur(neto)}</div><div class="sub">venta bruta − impuesto</div></div>
+  `;
+}
+document.getElementById('fiscalFilterTitular').addEventListener('change', e=>{
+  fiscalFilterTit = e.target.value; fiscalVentas = {}; renderFiscal();
+});
+
 function positionXirr(valor, filterFn, titulosActuales){
   const cfs = G().moves.filter(filterFn).filter(m=>m.valor===valor && m.fecha).map(m=>{
     const s = sec(m.valor); const moneda = s ? s.moneda : 'EUR';
@@ -670,13 +836,16 @@ function groupXirr(pos, filterFn){
 // ---- Render principal ----
 function render(){
   renderGroupTabs();
-  document.getElementById('grupoView').style.display = currentView==='valores' ? 'none' : '';
+  document.getElementById('grupoView').style.display = currentView==='grupo' ? '' : 'none';
   document.getElementById('valoresView').style.display = currentView==='valores' ? '' : 'none';
-  document.getElementById('groupToggle').style.display = currentView==='valores' ? 'none' : '';
-  document.getElementById('openModal').style.display = currentView==='valores' ? 'none' : '';
-  document.getElementById('generarInforme').style.display = currentView==='valores' ? 'none' : '';
+  document.getElementById('fiscalView').style.display = currentView==='fiscal' ? '' : 'none';
+  document.getElementById('groupToggle').style.display = currentView==='grupo' ? '' : 'none';
+  document.getElementById('openModal').style.display = currentView==='grupo' ? '' : 'none';
+  document.getElementById('generarInforme').style.display = currentView==='grupo' ? '' : 'none';
   if(currentView==='valores'){
     document.getElementById('groupEyebrow').textContent = 'Patrimonio · Valores y cotizaciones (global)';
+  } else if(currentView==='fiscal'){
+    document.getElementById('groupEyebrow').textContent = 'Patrimonio · Simulador fiscal · ' + G().nombre;
   } else {
     const lu = G().lastDataUpdate
       ? 'movimientos actualizados: ' + new Date(G().lastDataUpdate).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})
@@ -690,9 +859,12 @@ function render(){
     document.getElementById('workerUrlInput').value = DB.workerUrl || '';
     renderSecurities();
     renderYearClose();
+  } else if(currentView==='fiscal'){
+    renderFiscal();
   } else {
     renderKpiToggle();
     renderKpis();
+    renderComposicion();
     renderBreakdown(positions());
     renderEvolution();
     renderCash();
@@ -717,9 +889,11 @@ function renderGroupTabs(){
     return `<button class="gtab ${active?'active':''}" data-gid="${gid}">${g.nombre}${active?' ✎':''}</button>`;
   }).join('');
   const valoresActive = currentView==='valores';
+  const fiscalActive = currentView==='fiscal';
   wrap.innerHTML = tabs
     + `<button class="gtab gtab-add" id="addGrupoBtn">+ Añadir grupo</button>`
     + `<span style="flex:1 1 auto;min-width:12px;"></span>`
+    + `<button class="gtab ${fiscalActive?'active':''}" id="fiscalTab">🧮 Simulador fiscal</button>`
     + `<button class="gtab ${valoresActive?'active':''}" id="valoresTab">⚙ Valores y cotizaciones</button>`;
   wrap.querySelectorAll('.gtab[data-gid]').forEach(btn=>{
     btn.onclick = ()=>{
@@ -730,6 +904,7 @@ function renderGroupTabs(){
       } else {
         DB.activeGrupo = gid; currentView='grupo'; filterTit='Todos'; filterBanco='Todos'; kpiGroup='Total'; mode='titular';
         movFilterTit='Todos'; movFilterBanco='Todos'; movFilterValor='Todos'; movFilterOp='Todos'; pendingFilterValor='Todos';
+        fiscalFilterTit=null; fiscalVentas={};
         saveAll();
       }
       render();
@@ -744,6 +919,7 @@ function renderGroupTabs(){
     saveAll(); render();
   };
   document.getElementById('valoresTab').onclick = ()=>{ currentView='valores'; render(); };
+  document.getElementById('fiscalTab').onclick = ()=>{ currentView='fiscal'; render(); };
 }
 
 function renderTicker(){
@@ -774,7 +950,7 @@ function renderKpiToggle(){
   if(!['Total',...subs].includes(kpiGroup)) kpiGroup = 'Total';
   el.innerHTML = ['Total', ...subs].map(s=>`<button data-g="${s}" class="${s===kpiGroup?'active':''}">${s}</button>`).join('');
   el.querySelectorAll('button').forEach(btn=>{
-    btn.onclick = ()=>{ kpiGroup = btn.dataset.g; renderKpiToggle(); renderKpis(); renderTable(); renderClosedTable(); };
+    btn.onclick = ()=>{ kpiGroup = btn.dataset.g; renderKpiToggle(); renderKpis(); renderComposicion(); renderTable(); renderClosedTable(); };
   });
 }
 
@@ -812,6 +988,57 @@ function renderKpis(){
     <div class="kpi"><div class="label">Potencial</div><div class="value ${potencialEur>=0?'pos':'neg'}">${eur(potencialEur)}</div><div class="sub">hasta precio objetivo</div></div>
     <div class="kpi"><div class="label">Potencial %</div><div class="value ${potencialPct>=0?'pos':'neg'}">${pct(potencialPct)}</div><div class="sub">sobre valoración actual</div></div>
   `;
+}
+
+function renderComposicion(){
+  const filterFn = kpiGroup==='Total' ? (()=>true) : (m => groupOf(m.titular)===kpiGroup);
+  const pos = positions(filterFn).filter(p=>Math.abs(p.titulos)>0.001);
+  let rv=0, rf=0, otros=0;
+  pos.forEach(p=>{
+    const q = quoteEur(p.valor) || (p.coste/p.titulos);
+    const val = p.titulos*q;
+    const s = sec(p.valor);
+    const veh = (s && s.vehiculo) || '';
+    if(veh.startsWith('Acciones') || veh==='Fondos R. Variable') rv += val;
+    else if(veh==='Fondos R. Fija') rf += val;
+    else otros += val;
+  });
+  const efectivo = G().cashBalances.filter(c => kpiGroup==='Total' || groupOf(c.titular)===kpiGroup)
+    .reduce((s,c)=> s+(+c.saldo||0), 0);
+  const total = rv+rf+otros+efectivo;
+  const segmentos = [
+    {label:'Renta variable', val:rv, color:'#A9812E'},
+    {label:'Renta fija', val:rf, color:'#5B7A9E'},
+    {label:'Efectivo', val:efectivo, color:'#3F6B3B'},
+    {label:'Otros', val:otros, color:'#8A8368'},
+  ].filter(s=>s.val>0.01);
+
+  const legend = document.getElementById('composicionLegend');
+  const chart = document.getElementById('composicionChart');
+  if(!total || !segmentos.length){
+    chart.innerHTML = '';
+    legend.innerHTML = '<div class="empty-note" style="border:none;padding:0;">Sin datos todavía para mostrar la composición.</div>';
+    return;
+  }
+  legend.innerHTML = segmentos.map(s=>`
+    <div class="composicion-legend-item"><span class="dot" style="background:${s.color}"></span>
+      <b>${s.label}</b><span class="pct">${eur(s.val)} · ${pct(s.val/total)}</span>
+    </div>`).join('');
+
+  const r = 42, cx=50, cy=50, circ = 2*Math.PI*r;
+  let acc = 0;
+  const arcs = segmentos.map(s=>{
+    const frac = s.val/total;
+    const dash = frac*circ;
+    const el = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="16"
+      stroke-dasharray="${dash.toFixed(2)} ${(circ-dash).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    acc += dash;
+    return el;
+  }).join('');
+  chart.innerHTML = `<svg viewBox="0 0 100 100" width="112" height="112">${arcs}
+    <text x="50" y="47" text-anchor="middle" font-size="9" font-family="'IBM Plex Mono',monospace" fill="#847C68">Total</text>
+    <text x="50" y="60" text-anchor="middle" font-size="10.5" font-weight="700" font-family="'Fraunces',serif" fill="#232821">${pct(rv/total)} RV</text>
+  </svg>`;
 }
 
 function renderBreakdown(pos){
@@ -1031,6 +1258,11 @@ function renderTable(){
     return {...p, q, val, vehiculo: (s && s.vehiculo) || 'Sin clasificar'};
   });
   document.getElementById('posCount').textContent = `${withVal.length.toLocaleString('es-ES',{useGrouping:'always'})} posiciones`;
+
+  const concentradas = withVal.filter(p=> total && (p.val/total) > 0.10).sort((a,b)=> b.val-a.val);
+  document.getElementById('alertaConcentracion').innerHTML = concentradas.length
+    ? `<div class="alerta-concentracion">⚠ Concentración alta (&gt;10% de la cartera): ${concentradas.map(p=>`${p.valor} (${pct(p.val/total)})`).join(' · ')}</div>`
+    : '';
 
   const rowHtml = (p)=>{
     const resultado = p.val + p.dividendos + (p.entradas||0) - p.coste;
@@ -1797,6 +2029,7 @@ render();
 </script>
 </body>
 </html>
+
 
 
 
