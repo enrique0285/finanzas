@@ -102,7 +102,15 @@ tr.group-row .group-count{color:var(--text-dim);font-family:'IBM Plex Mono',mono
 tr.group-row:hover td{background:var(--panel-2);}
 tr.grp td{background:var(--panel-2);font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);padding:8px 12px;border-top:2px solid var(--line);border-bottom:1px solid var(--line);}
 
-.composicion-wrap{display:flex;align-items:center;gap:24px;margin:20px 32px 0;padding:18px 20px;border:1px solid var(--line);background:var(--panel);flex-wrap:wrap;}
+.composicion-wrap{display:flex;align-items:stretch;gap:24px;margin:20px 32px 0;padding:18px 20px;border:1px solid var(--line);background:var(--panel);flex-wrap:wrap;}
+.composicion-col{display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
+.composicion-sep{width:1px;background:var(--line);align-self:stretch;}
+.composicion-tipos-title{font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:10px;width:100%;}
+.tipo-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line);font-family:'IBM Plex Mono',monospace;font-size:12px;}
+.tipo-row:last-child{border-bottom:none;}
+.tipo-row .tn{display:flex;align-items:center;gap:7px;font-weight:600;color:var(--text);font-size:12.5px;}
+.tipo-row .tn .dot{width:9px;height:9px;border-radius:2px;flex-shrink:0;}
+.tipo-row .td{color:var(--text-dim);text-align:right;white-space:nowrap;}
 .composicion-legend-item{display:flex;align-items:center;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;margin-bottom:10px;}
 .composicion-legend-item .dot{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
 .composicion-legend-item b{color:var(--text);font-weight:600;}
@@ -203,8 +211,15 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
   <div class="kpis" id="kpis"></div>
 
   <div class="composicion-wrap">
-    <div id="composicionChart"></div>
-    <div id="composicionLegend"></div>
+    <div class="composicion-col">
+      <div id="composicionChart"></div>
+      <div id="composicionLegend"></div>
+    </div>
+    <div class="composicion-sep"></div>
+    <div class="composicion-col" style="flex:1;min-width:260px;">
+      <div class="composicion-tipos-title">Rentabilidad por tipo</div>
+      <div id="composicionTipos"></div>
+    </div>
   </div>
 
   <section>
@@ -1060,18 +1075,26 @@ function renderComposicion(){
   if(!total || !segmentos.length){
     chart.innerHTML = '';
     legend.innerHTML = '<div class="empty-note" style="border:none;padding:0;">Sin datos todavía para mostrar la composición.</div>';
+    document.getElementById('composicionTipos').innerHTML = '';
     return;
   }
-  legend.innerHTML = segmentos.map(s=>{
-    const b = byTipo[s.label];
-    const detalle = b
-      ? `<div class="pct" style="margin-top:2px;">Resultado ${eur(b.resultado)} · latente ${eur(b.latente)} / realizado ${eur(b.realizado)} · TIR ${pct(b.tir)}</div>`
-      : '';
-    return `<div class="composicion-legend-item" style="align-items:flex-start;">
-      <span class="dot" style="background:${s.color};margin-top:3px;"></span>
-      <div><b>${s.label}</b><span class="pct">${eur(s.val)} · ${pct(s.val/total)}</span>${detalle}</div>
+  legend.innerHTML = segmentos.map(s=>`
+    <div class="composicion-legend-item"><span class="dot" style="background:${s.color}"></span>
+      <b>${s.label}</b><span class="pct">${eur(s.val)} · ${pct(s.val/total)}</span>
+    </div>`).join('');
+
+  const COLOR_MAP = {'Acciones €':'#A9812E','Acciones $':'#B5704A','Fondos':'#5B7A9E','Capital riesgo':'#8B6BA8','Otros':'#8A8368'};
+  const ORDEN_TIPOS = ['Acciones €','Acciones $','Fondos','Capital riesgo','Otros'];
+  const tiposConHistorial = ORDEN_TIPOS.filter(t=> byTipo[t]);
+  const tiposWrap = document.getElementById('composicionTipos');
+  tiposWrap.innerHTML = tiposConHistorial.length ? tiposConHistorial.map(t=>{
+    const b = byTipo[t];
+    const vivo = b.valoracion > 0.01;
+    return `<div class="tipo-row">
+      <div class="tn"><span class="dot" style="background:${COLOR_MAP[t]}"></span>${t}${vivo?'':' <span style="color:var(--text-dim);font-weight:400;">(sin posición actual)</span>'}</div>
+      <div class="td">${eur(b.resultado)} · lat. ${eur(b.latente)} / real. ${eur(b.realizado)} · TIR ${pct(b.tir)}</div>
     </div>`;
-  }).join('');
+  }).join('') : '<div class="empty-note" style="border:none;padding:0;">Sin historial todavía.</div>';
 
   const r = 42, cx=50, cy=50, circ = 2*Math.PI*r;
   let acc = 0;
