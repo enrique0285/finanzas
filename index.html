@@ -103,10 +103,11 @@ tr.group-row:hover td{background:var(--panel-2);}
 tr.grp td{background:var(--panel-2);font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);padding:8px 12px;border-top:2px solid var(--line);border-bottom:1px solid var(--line);}
 
 .composicion-wrap{display:flex;align-items:center;gap:24px;margin:20px 32px 0;padding:18px 20px;border:1px solid var(--line);background:var(--panel);flex-wrap:wrap;}
-.composicion-legend-item{display:flex;align-items:center;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;margin-bottom:8px;}
+.composicion-legend-item{display:flex;align-items:center;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;margin-bottom:10px;}
 .composicion-legend-item .dot{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
 .composicion-legend-item b{color:var(--text);font-weight:600;}
 .composicion-legend-item span.pct{color:var(--text-dim);margin-left:4px;}
+.composicion-legend-item div.pct{color:var(--text-dim);font-size:11px;}
 .alerta-concentracion{display:flex;align-items:flex-start;gap:10px;background:rgba(166,63,58,.08);border:1px solid rgba(166,63,58,.35);color:var(--burgundy);padding:12px 16px;border-radius:2px;margin-bottom:16px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:1.6;}
 .empty-note{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-dim);padding:13px 14px;border-top:1px dashed var(--line);}
 
@@ -571,6 +572,7 @@ function migrateIfNeeded(){
     if(s.vehiculo !== 'Fondos Capital Riesgo' && /capital\s*riesgo/i.test(s.nombre)){
       s.vehiculo = 'Fondos Capital Riesgo';
     }
+    if(s.vehiculo === 'Acciones') s.vehiculo = 'Acciones €';
   });
 }
 function touchDataUpdate(){ G().lastDataUpdate = Date.now(); }
@@ -997,20 +999,48 @@ function renderKpis(){
   `;
 }
 
+function tipoDeValor(nombre){
+  const s = sec(nombre);
+  const veh = (s && s.vehiculo) || '';
+  if(veh.startsWith('Acciones') || veh==='Fondos R. Variable') return 'Renta variable';
+  if(veh==='Fondos R. Fija') return 'Renta fija';
+  if(veh==='Fondos Capital Riesgo') return 'Capital riesgo';
+  return 'Otros';
+}
 function renderComposicion(){
   const filterFn = kpiGroup==='Total' ? (()=>true) : (m => groupOf(m.titular)===kpiGroup);
-  const pos = positions(filterFn).filter(p=>Math.abs(p.titulos)>0.001);
-  let rv=0, rf=0, capitalRiesgo=0, otros=0;
-  pos.forEach(p=>{
-    const q = quoteEur(p.valor) || (p.coste/p.titulos);
-    const val = p.titulos*q;
-    const s = sec(p.valor);
-    const veh = (s && s.vehiculo) || '';
-    if(veh.startsWith('Acciones') || veh==='Fondos R. Variable') rv += val;
-    else if(veh==='Fondos R. Fija') rf += val;
-    else if(veh==='Fondos Capital Riesgo') capitalRiesgo += val;
-    else otros += val;
+  const posAll = positions(filterFn, 'todas');
+  const byTipo = {};
+  posAll.forEach(p=>{
+    const tipo = tipoDeValor(p.valor);
+    if(!byTipo[tipo]) byTipo[tipo] = {valores:new Set(), coste:0, entradas:0, dividendos:0, valoracion:0};
+    const b = byTipo[tipo];
+    b.valores.add(p.valor);
+    b.coste += p.coste;
+    b.entradas += p.entradas||0;
+    b.dividendos += p.dividendos;
+    if(Math.abs(p.titulos)>0.001){
+      const q = quoteEur(p.valor) || (p.coste/p.titulos);
+      b.valoracion += p.titulos*q;
+    }
   });
+  Object.keys(byTipo).forEach(tipo=>{
+    const b = byTipo[tipo];
+    b.resultado = b.valoracion + b.dividendos + b.entradas - b.coste;
+    let latente = 0;
+    posAll.filter(p=> tipoDeValor(p.valor)===tipo && Math.abs(p.titulos)>0.001).forEach(p=>{
+      const q = quoteEur(p.valor) || (p.coste/p.titulos);
+      latente += p.titulos*q + p.dividendos + (p.entradas||0) - p.coste;
+    });
+    b.latente = latente;
+    b.realizado = b.resultado - latente;
+    b.tir = valoresXirr([...b.valores], filterFn, b.valoracion);
+  });
+
+  const rv = byTipo['Renta variable']?.valoracion || 0;
+  const rf = byTipo['Renta fija']?.valoracion || 0;
+  const capitalRiesgo = byTipo['Capital riesgo']?.valoracion || 0;
+  const otros = byTipo['Otros']?.valoracion || 0;
   const efectivo = G().cashBalances.filter(c => kpiGroup==='Total' || groupOf(c.titular)===kpiGroup)
     .reduce((s,c)=> s+(+c.saldo||0), 0);
   const total = rv+rf+capitalRiesgo+otros+efectivo;
@@ -1029,10 +1059,16 @@ function renderComposicion(){
     legend.innerHTML = '<div class="empty-note" style="border:none;padding:0;">Sin datos todavía para mostrar la composición.</div>';
     return;
   }
-  legend.innerHTML = segmentos.map(s=>`
-    <div class="composicion-legend-item"><span class="dot" style="background:${s.color}"></span>
-      <b>${s.label}</b><span class="pct">${eur(s.val)} · ${pct(s.val/total)}</span>
-    </div>`).join('');
+  legend.innerHTML = segmentos.map(s=>{
+    const b = byTipo[s.label];
+    const detalle = b
+      ? `<div class="pct" style="margin-top:2px;">Resultado ${eur(b.resultado)} · latente ${eur(b.latente)} / realizado ${eur(b.realizado)} · TIR ${pct(b.tir)}</div>`
+      : '';
+    return `<div class="composicion-legend-item" style="align-items:flex-start;">
+      <span class="dot" style="background:${s.color};margin-top:3px;"></span>
+      <div><b>${s.label}</b><span class="pct">${eur(s.val)} · ${pct(s.val/total)}</span>${detalle}</div>
+    </div>`;
+  }).join('');
 
   const r = 42, cx=50, cy=50, circ = 2*Math.PI*r;
   let acc = 0;
@@ -2059,6 +2095,7 @@ render();
 </script>
 </body>
 </html>
+
 
 
 
