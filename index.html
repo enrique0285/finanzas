@@ -106,11 +106,12 @@ tr.grp td{background:var(--panel-2);font-family:'IBM Plex Mono',monospace;font-s
 .composicion-col{display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
 .composicion-sep{width:1px;background:var(--line);align-self:stretch;}
 .composicion-tipos-title{font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:10px;width:100%;}
-.tipo-row{display:grid;grid-template-columns:150px 1fr;align-items:baseline;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line);font-family:'IBM Plex Mono',monospace;font-size:12px;}
-.tipo-row:last-child{border-bottom:none;}
-.tipo-row .tn{display:flex;align-items:center;gap:7px;font-weight:600;color:var(--text);font-size:12.5px;flex-wrap:wrap;}
-.tipo-row .tn .dot{width:9px;height:9px;border-radius:2px;flex-shrink:0;}
-.tipo-row .td{color:var(--text-dim);text-align:left;}
+table.tipos-table{border-collapse:collapse;}
+table.tipos-table td{padding:8px 0;border-bottom:1px dashed var(--line);vertical-align:baseline;font-family:'IBM Plex Mono',monospace;font-size:12px;}
+table.tipos-table tr:last-child td{border-bottom:none;}
+table.tipos-table td.tn-cell{font-weight:600;color:var(--text);font-size:12.5px;white-space:nowrap;padding-right:18px;}
+table.tipos-table td.tn-cell .dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;vertical-align:middle;}
+table.tipos-table td.td-cell{color:var(--text-dim);width:100%;}
 .composicion-legend-item{display:flex;align-items:center;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;margin-bottom:10px;}
 .composicion-legend-item .dot{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
 .composicion-legend-item b{color:var(--text);font-weight:600;}
@@ -296,6 +297,20 @@ footer{padding:36px 32px 0;font-family:'IBM Plex Mono',monospace;font-size:11.5p
       </div>
     </div>
     <div id="evoChart"></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <div>
+        <div class="section-title">Dividendos cobrados por año</div>
+        <div class="section-sub">Solo dividendos en efectivo — no incluye los cobrados en acciones a coste 0 (esos aumentan tus títulos, no tu caja).</div>
+      </div>
+      <div class="toggle" id="divRangeToggle">
+        <button data-r="10" class="active">Últimos 10 años</button>
+        <button data-r="all">Todo</button>
+      </div>
+    </div>
+    <div id="divPorAnioChart"></div>
   </section>
 
   <div class="divider"><span>Datos</span><button class="btn ghost small" id="toggleDatosBtn">Ocultar</button></div>
@@ -891,6 +906,7 @@ function render(){
     renderComposicion();
     renderBreakdown(positions());
     renderEvolution();
+    renderDividendosPorAnio();
     renderCash();
     renderPending();
     renderFilterOptions();
@@ -974,7 +990,7 @@ function renderKpiToggle(){
   if(!['Total',...subs].includes(kpiGroup)) kpiGroup = 'Total';
   el.innerHTML = ['Total', ...subs].map(s=>`<button data-g="${s}" class="${s===kpiGroup?'active':''}">${s}</button>`).join('');
   el.querySelectorAll('button').forEach(btn=>{
-    btn.onclick = ()=>{ kpiGroup = btn.dataset.g; renderKpiToggle(); renderKpis(); renderComposicion(); renderTable(); renderClosedTable(); };
+    btn.onclick = ()=>{ kpiGroup = btn.dataset.g; renderKpiToggle(); renderKpis(); renderComposicion(); renderDividendosPorAnio(); renderTable(); renderClosedTable(); };
   });
 }
 
@@ -1019,7 +1035,8 @@ function tipoDeValor(nombre){
   const veh = (s && s.vehiculo) || '';
   if(veh==='Acciones €') return 'Acciones €';
   if(veh==='Acciones $') return 'Acciones $';
-  if(veh==='Fondos R. Variable' || veh==='Fondos R. Fija') return 'Fondos';
+  if(veh==='Fondos R. Variable') return 'Fondos R. Variable';
+  if(veh==='Fondos R. Fija') return 'Fondos R. Fija';
   if(veh==='Fondos Capital Riesgo') return 'Capital riesgo';
   return 'Otros';
 }
@@ -1055,16 +1072,18 @@ function renderComposicion(){
 
   const accEur = byTipo['Acciones €']?.valoracion || 0;
   const accUsd = byTipo['Acciones $']?.valoracion || 0;
-  const fondos = byTipo['Fondos']?.valoracion || 0;
+  const fondosRV = byTipo['Fondos R. Variable']?.valoracion || 0;
+  const fondosRF = byTipo['Fondos R. Fija']?.valoracion || 0;
   const capitalRiesgo = byTipo['Capital riesgo']?.valoracion || 0;
   const otros = byTipo['Otros']?.valoracion || 0;
   const efectivo = G().cashBalances.filter(c => kpiGroup==='Total' || groupOf(c.titular)===kpiGroup)
     .reduce((s,c)=> s+(+c.saldo||0), 0);
-  const total = accEur+accUsd+fondos+capitalRiesgo+otros+efectivo;
+  const total = accEur+accUsd+fondosRV+fondosRF+capitalRiesgo+otros+efectivo;
   const segmentos = [
     {label:'Acciones €', val:accEur, color:'#A9812E'},
     {label:'Acciones $', val:accUsd, color:'#B5704A'},
-    {label:'Fondos', val:fondos, color:'#5B7A9E'},
+    {label:'Fondos R. Variable', val:fondosRV, color:'#5B7A9E'},
+    {label:'Fondos R. Fija', val:fondosRF, color:'#4C8C96'},
     {label:'Capital riesgo', val:capitalRiesgo, color:'#8B6BA8'},
     {label:'Efectivo', val:efectivo, color:'#3F6B3B'},
     {label:'Otros', val:otros, color:'#8A8368'},
@@ -1083,18 +1102,23 @@ function renderComposicion(){
       <b>${s.label}</b><span class="pct">${eur(s.val)} · ${pct(s.val/total)}</span>
     </div>`).join('');
 
-  const COLOR_MAP = {'Acciones €':'#A9812E','Acciones $':'#B5704A','Fondos':'#5B7A9E','Capital riesgo':'#8B6BA8','Otros':'#8A8368'};
-  const ORDEN_TIPOS = ['Acciones €','Acciones $','Fondos','Capital riesgo','Otros'];
+  const COLOR_MAP = {'Acciones €':'#A9812E','Acciones $':'#B5704A','Fondos R. Variable':'#5B7A9E','Fondos R. Fija':'#4C8C96','Capital riesgo':'#8B6BA8','Otros':'#8A8368'};
+  const ORDEN_TIPOS = ['Acciones €','Acciones $','Fondos R. Variable','Fondos R. Fija','Capital riesgo','Otros'];
   const tiposConHistorial = ORDEN_TIPOS.filter(t=> byTipo[t]);
   const tiposWrap = document.getElementById('composicionTipos');
-  tiposWrap.innerHTML = tiposConHistorial.length ? tiposConHistorial.map(t=>{
-    const b = byTipo[t];
-    const vivo = b.valoracion > 0.01;
-    return `<div class="tipo-row">
-      <div class="tn"><span class="dot" style="background:${COLOR_MAP[t]}"></span>${t}</div>
-      <div class="td">${vivo?'':'<span style="font-style:italic;">sin posición actual · </span>'}${eur(b.resultado)} · lat. ${eur(b.latente)} / real. ${eur(b.realizado)} · TIR ${pct(b.tir)}</div>
-    </div>`;
-  }).join('') : '<div class="empty-note" style="border:none;padding:0;">Sin historial todavía.</div>';
+  if(!tiposConHistorial.length){
+    tiposWrap.innerHTML = '<div class="empty-note" style="border:none;padding:0;">Sin historial todavía.</div>';
+  } else {
+    const filas = tiposConHistorial.map(t=>{
+      const b = byTipo[t];
+      const vivo = b.valoracion > 0.01;
+      return `<tr>
+        <td class="tn-cell"><span class="dot" style="background:${COLOR_MAP[t]}"></span>${t}</td>
+        <td class="td-cell">${vivo?'':'<span style="font-style:italic;">sin posición actual · </span>'}${eur(b.resultado)} · lat. ${eur(b.latente)} / real. ${eur(b.realizado)} · TIR ${pct(b.tir)}</td>
+      </tr>`;
+    }).join('');
+    tiposWrap.innerHTML = `<table class="tipos-table"><tbody>${filas}</tbody></table>`;
+  }
 
   const r = 42, cx=50, cy=50, circ = 2*Math.PI*r;
   let acc = 0;
@@ -1254,6 +1278,28 @@ function renderEvolution(){
   if(evoRange==='10' && series.length > 10) series = series.slice(-10);
   document.getElementById('evoChart').innerHTML = buildEvoSvg(series);
 }
+let divRange = '10'; // '10' | 'all'
+function renderDividendosPorAnio(){
+  const filterFn = kpiGroup==='Total' ? (()=>true) : (m => groupOf(m.titular)===kpiGroup);
+  const byYear = {};
+  G().moves.filter(filterFn).filter(m=>m.operacion==='Dividendos' && m.fecha).forEach(m=>{
+    const year = new Date(m.fecha).getFullYear();
+    const s = sec(m.valor);
+    const moneda = s ? s.moneda : 'EUR';
+    byYear[year] = (byYear[year]||0) + toEurAmt((+m.importe)||0, moneda);
+  });
+  let years = Object.keys(byYear).map(Number).sort((a,b)=>a-b);
+  document.getElementById('divRangeToggle').style.display = years.length > 10 ? '' : 'none';
+  if(divRange==='10' && years.length > 10) years = years.slice(-10);
+  const series = years.map(y=>({period:String(y), value:byYear[y]}));
+  document.getElementById('divPorAnioChart').innerHTML = buildEvoSvg(series);
+}
+document.getElementById('divRangeToggle').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if(!btn) return;
+  divRange = btn.dataset.r;
+  [...document.querySelectorAll('#divRangeToggle button')].forEach(b=>b.classList.toggle('active', b===btn));
+  renderDividendosPorAnio();
+});
 document.getElementById('evoRangeToggle').addEventListener('click', e=>{
   const btn = e.target.closest('button'); if(!btn) return;
   evoRange = btn.dataset.r;
@@ -2121,6 +2167,7 @@ render();
 </script>
 </body>
 </html>
+
 
 
 
